@@ -301,12 +301,12 @@ function canPlaceWater(board, row, col) {
     const islands = getLandRegions(nextBoard);
 
     for (const island of islands) {
-        const clueCount = countCluesInRegion(nextBoard, island);
+        const clueCount = countCluesInIsland(nextBoard, island);
 
         if (clueCount > 1) return false;
         if (clueCount === 0) return false;
 
-        const clueValue = getClueValueInRegion(nextBoard, island);
+        const clueValue = getClueValueInIsland(nextBoard, island);
 
         if (island.length > clueValue) return false;
 
@@ -319,15 +319,62 @@ function canPlaceWater(board, row, col) {
     return true;
 }
 
+// Validator to check if a finished board is a valid nurikabe puzzle
+function isValidFinishedBoard(board) {
+    if (has2x2Water(board)) return false;  // make sure there are no 2x2 pockets of water
+    if (!isWaterConnected(board)) return false;  // make sure all the water is connected
+
+    const islands = getLandRegions(board);  // gather the groups of indices for each island on the board
+
+    for (const island of islands) {
+        // Make sure each island has just 1 clue square
+        const clueCount = countCluesInIsland(board, island);
+        if (clueCount !== 1) return false;
+
+        // Make sure the clue value is the correct number for the island size
+        const clueValue = getClueValueInIsland(board, island);
+        if (island.length !== clueValue) return false;
+    }
+
+    return true;  // yay we have a valid board woohoo
+}
+
+// Make array of SIZE * SIZE single character strings full of '#'
+function makeEmptyBoard() {
+    return Array(SIZE * SIZE).fill("#");
+}
+
+// Place island at certain indices of puzzle string
+function placeIsland(board, cells, clueValue) {
+    const clueIndex = cells[0];
+
+    for (const cellIndex of cells) {
+        board[cellIndex] = " ";
+    }
+
+    board[clueIndex] = clueValue.toString(16).toUpperCase();
+}
 
 
+// function generateSolvedPuzzle() {
+
+// }
 
 //------------------------------------------------------
 
 // setCell(board, 0, 0, '6');
 // console.log(getCell(board, 2, 1))
 // console.log(getNeighborIndexes(0, 0))
-console.log(getLandRegions(board));
+//console.log(getLandRegions(board));
 //console.log(board);
+console.log(isValidFinishedBoard(board));
+board = makeEmptyBoard();
+console.log(isValidFinishedBoard(board));
+board = "6   # ##########1#2 # # 2##### ###4## # #   ##2# #######7 # # 5#1# # ########## 2".split("");
+console.log(isValidFinishedBoard(board));
+board = "5     ##########1#2 # # 2##### ###4## # #   ##2# #######7 #   5#2# # ########## 3".split("");
+console.log(isValidFinishedBoard(board));
+board = "# 4###   # #2 ##4## ####3##### 3#  ## # ######  #2 # ###4#### ##1#  3# #######5 #".split("");
+console.log(isValidFinishedBoard(board));
 
 //console.log(toString(board));
