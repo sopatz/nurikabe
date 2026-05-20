@@ -382,13 +382,133 @@ function placeIsland(board, cells, clueValue) {
     board[clueIndex] = clueValue.toString(16).toUpperCase();
 }
 
+// Check if land (island) square can be placed at given index
 function canPlaceIslandCell(board, islandCells, cellIndex) {
-    // returns true if adding this cell to this island would not touch another island
+    // Make sure the cell exists on the board
+    if (cellIndex < 0 || cellIndex >= SIZE * SIZE) return false;
+
+    // Can only grow an island into water
+    if (board[cellIndex] !== "#") return false;
+
+    const islandSet = new Set(islandCells);
+    const neighbors = getNeighborCellIndices(cellIndex);
+
+    // If this island already has cells, the new cell must touch it
+    if (islandCells.length > 0) {
+        let touchesIsland = false;
+
+        // Check all neighbors of cell to be added to island to see if it touches island
+        for (const neighborIndex of neighbors) {
+            if (islandSet.has(neighborIndex)) {
+                touchesIsland = true;  // yay new cell touches island :)
+                break;
+            }
+        }
+
+        if (!touchesIsland) return false;  // Cell can't be added to island :(
+    }
+
+    // The new cell cannot touch land from a different island
+    for (const neighborIndex of neighbors) {
+        if (islandSet.has(neighborIndex)) continue;
+
+        // Check if cell has land neighbors that are from a different island than the one currently being checked
+        if (isLand(board[neighborIndex])) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
-// function generateSolvedPuzzle() {
+// Get all neighboring water cells this island is allowed to grow into
+function getIslandGrowthCandidates(board, islandCells) {
+    const candidates = new Set();
 
-// }
+    // If the island has no cells yet, any valid water cell could be its start
+    if (islandCells.length === 0) {
+        for (let cellIndex = 0; cellIndex < SIZE * SIZE; cellIndex++) {
+            if (canPlaceIslandCell(board, islandCells, cellIndex)) {
+                candidates.add(cellIndex);
+            }
+        }
+
+        return [...candidates];
+    }
+
+    // If the island already exists, gather all valid neighboring water cells of island as growth candidates
+    for (const cellIndex of islandCells) {
+        for (const neighborIndex of getNeighborCellIndices(cellIndex)) {
+            if (canPlaceIslandCell(board, islandCells, neighborIndex)) {
+                candidates.add(neighborIndex);
+            }
+        }
+    }
+
+    return [...candidates];
+}
+
+// Helper function to choose one random item from array
+function randomChoice(items) {
+    if (items.length === 0) return null;
+    return items[Math.floor(Math.random() * items.length)];
+}
+
+// Create one island of given size
+function growIsland(board, startCellIndex, targetSize) {
+    const islandCells = [];
+
+    // Make sure first cell can be placed
+    if (!canPlaceIslandCell(board, islandCells, startCellIndex)) {
+        return null;
+    }
+
+    // Mark starting cell as land (the first of its island, yayy)
+    islandCells.push(startCellIndex);
+    board[startCellIndex] = " ";
+
+    // Repeatedly add growth candidates until target island size is reached
+    while (islandCells.length < targetSize) {
+        // Get island's current growth candidates (valid water neighbors)
+        const candidates = getIslandGrowthCandidates(board, islandCells);
+
+        // If there is nowhere to grow, the island generation fails and each cell is set back to water
+        if (candidates.length === 0) {
+            for (const cellIndex of islandCells) {
+                board[cellIndex] = "#";
+            }
+            return null;
+        }
+
+        // Choose random candidate to be the next cell added to island 
+        const nextCell = randomChoice(candidates);
+
+        // Add randomly seelcted candidate cell to island
+        islandCells.push(nextCell);
+        board[nextCell] = " ";
+    }
+
+    return islandCells;
+}
+
+// do buildCandidateSolution() next
+
+function generateSolvedPuzzle() {
+    while (true) {
+        const board = makeEmptyBoard();
+
+        // To-Do List:
+        // randomly create islands
+        // ensure islands do not touch orthogonally
+        // fill remaining cells as water
+
+        if (has2x2Water(board)) continue;
+        if (!isWaterConnected(board)) continue;
+        if (!isValidFinishedBoard(board)) continue;
+
+        return toString(board);
+    }
+}
 
 //------------------------------------------------------
 
@@ -397,14 +517,51 @@ function canPlaceIslandCell(board, islandCells, cellIndex) {
 // console.log(getNeighborIndexes(0, 0))
 //console.log(getLandRegions(board));
 //console.log(board);
-console.log(isValidFinishedBoard(board));
+
+// console.log(isValidFinishedBoard(board));
+// board = makeEmptyBoard();
+// console.log(isValidFinishedBoard(board));
+// board = "6   # ##########1#2 # # 2##### ###4## # #   ##2# #######7 # # 5#1# # ########## 2".split("");
+// console.log(isValidFinishedBoard(board));
+// board = "5     ##########1#2 # # 2##### ###4## # #   ##2# #######7 #   5#2# # ########## 3".split("");
+// console.log(isValidFinishedBoard(board));
+// board = "# 4###   # #2 ##4## ####3##### 3#  ## # ######  #2 # ###4#### ##1#  3# #######5 #".split("");
+// console.log(isValidFinishedBoard(board));
+
+//-------------------------------------------------------------------------------------------------------------
+
+// board = makeEmptyBoard();
+
+// let island = [];
+// console.log(canPlaceIslandCell(board, island, 40)); // true
+
+// island.push(40);
+// board[40] = " ";
+
+// console.log(canPlaceIslandCell(board, island, 41)); // true
+// console.log(canPlaceIslandCell(board, island, 42)); // false
+
+// board[42] = " "; // different land not added to island
+// console.log(canPlaceIslandCell(board, island, 41)); // false
+
+//-------------------------------------------------------------------------------------------------------------
+
+// board = makeEmptyBoard();
+
+// let island = [40];
+// board[40] = " ";
+// console.log(getIslandGrowthCandidates(board, island));
+
+// board[42] = " ";  // land cell not in island, so 41 shouldn't show up in candidates
+// console.log(getIslandGrowthCandidates(board, island));
+
+//-------------------------------------------------------------------------------------------------------------
+
 board = makeEmptyBoard();
-console.log(isValidFinishedBoard(board));
-board = "6   # ##########1#2 # # 2##### ###4## # #   ##2# #######7 # # 5#1# # ########## 2".split("");
-console.log(isValidFinishedBoard(board));
-board = "5     ##########1#2 # # 2##### ###4## # #   ##2# #######7 #   5#2# # ########## 3".split("");
-console.log(isValidFinishedBoard(board));
-board = "# 4###   # #2 ##4## ####3##### 3#  ## # ######  #2 # ###4#### ##1#  3# #######5 #".split("");
-console.log(isValidFinishedBoard(board));
+
+const island = growIsland(board, 40, 5);
+
+console.log(island);
+console.log(toString(board));
 
 //console.log(toString(board));
