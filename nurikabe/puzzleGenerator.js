@@ -125,9 +125,9 @@ function floodFillWater(board, firstWaterRow, firstWaterCol) {
     return waterCells;
 }
 
-// Quick helper since ' ' or a number can be land
+// Helper for land checking
 function isLand(cell) {
-    return cell !== "#";
+    return cell === " " || isClue(cell);  // ' ' or a number clue can be land
 }
 
 function getLandRegions(board) {
@@ -319,8 +319,35 @@ function canPlaceWater(board, row, col) {
     return true;
 }
 
+function rowOf(cellIndex) {
+    return Math.floor(cellIndex / SIZE);
+}
+
+function colOf(cellIndex) {
+    return cellIndex % SIZE;
+}
+
+function getNeighborCellIndices(cellIndex) {
+    return getNeighborIndices(rowOf(cellIndex), colOf(cellIndex));
+}
+
+// Make sure board is correct size and does not contain invalid characters
+function isValidBoardShape(board) {
+    if (board.length !== SIZE * SIZE) return false;  // Ensure board size is correct
+
+    // Ensure board only contains valid characters
+    for (const cell of board) {
+        if (cell !== "#" && cell !== " " && !isClue(cell)) {
+            return false;
+        }
+    }
+
+    return true;  // we all good :)
+}
+
 // Validator to check if a finished board is a valid nurikabe puzzle
 function isValidFinishedBoard(board) {
+    if (!isValidBoardShape(board)) return false;  // make sure board size and characters are valid
     if (has2x2Water(board)) return false;  // make sure there are no 2x2 pockets of water
     if (!isWaterConnected(board)) return false;  // make sure all the water is connected
 
@@ -355,6 +382,9 @@ function placeIsland(board, cells, clueValue) {
     board[clueIndex] = clueValue.toString(16).toUpperCase();
 }
 
+function canPlaceIslandCell(board, islandCells, cellIndex) {
+    // returns true if adding this cell to this island would not touch another island
+}
 
 // function generateSolvedPuzzle() {
 
