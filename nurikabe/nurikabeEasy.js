@@ -99,7 +99,7 @@ function setup() {
   restartButton.position(10, 110);
   restartButton.mousePressed(restart);
 
-  // Create a button to restart the puzzle
+  // Create a button to solve the puzzle for testing
   // let solveButton = createButton('Solve');
   // solveButton.position(10, 160);
   // solveButton.mousePressed(solve);

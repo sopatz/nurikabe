@@ -19,7 +19,7 @@ let hintSquares = []; let cantBeHint = [];
 
 function preload() {
   console.log("Attempting to load puzzles");
-  puzzles = loadJSON('nurikabePuzzles.json', () => {
+  puzzles = loadJSON('nuriGenerateTest.json', () => {
     console.log("Puzzles loaded successfully");
   }, () => {
     console.log("Failed to load puzzles");
@@ -99,10 +99,10 @@ function setup() {
   restartButton.position(10, 110);
   restartButton.mousePressed(restart);
 
-  // Create a button to restart the puzzle
-  // let solveButton = createButton('Solve');
-  // solveButton.position(10, 160);
-  // solveButton.mousePressed(solve);
+  //Create a button to solve the puzzle for testing
+  let solveButton = createButton('Solve');
+  solveButton.position(10, 160);
+  solveButton.mousePressed(solve);
 
   let hintButton = createButton('Hint');
   hintButton.position(10, 160);
@@ -269,12 +269,12 @@ function restart() {
 }
 
 //Set current color state to the solution colors to solve the puzzle
-// function solve() {
-//   colorState = solution_colors;
-//   //freeze canvas after one more loop of draw()
-//   redraw();
-//   noLoop();
-// }
+function solve() {
+  colorState = solution_colors;
+  //freeze canvas after one more loop of draw()
+  redraw();
+  noLoop();
+}
 
 //gives the player a hint
 async function hint() {

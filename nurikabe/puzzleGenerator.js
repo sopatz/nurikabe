@@ -22,6 +22,18 @@ function toString(board) {
     return board.join("");
 }
 
+// Turn puzzle solution string into puzzle starting string
+function solutionToStarting(solpuz) {
+    let puzzle = [];
+    for (let index = 0; index < solpuz.length; index++) {
+        if (solpuz[index] === ' ' || solpuz[index] === '#') {
+            puzzle[index] = '.';
+        }
+        else puzzle[index] = solpuz[index];
+    }
+    return toString(puzzle);
+}
+
 // Make sure input row and column is within the bounds of the board
 function inBounds(row, col) {
     return row >= 0 && row < SIZE && col >= 0 && col < SIZE;
@@ -491,23 +503,96 @@ function growIsland(board, startCellIndex, targetSize) {
     return islandCells;
 }
 
-// do buildCandidateSolution() next
+// Return a shuffled copy of an array
+function shuffle(items) {
+    const shuffled = [...items];  // create copy so we don't mess with the original array
+    for (let i = shuffled.length - 1; i > 0; i--) {  // walk backwards thru array
+        // Pick a random index from 0 to i
+        const j = Math.floor(Math.random() * (i + 1));
+        // Swap values at positions i and j
+        const temp = shuffled[i];
+        shuffled[i] = shuffled[j];
+        shuffled[j] = temp;
+    }
+    return shuffled;  // reutrn new mixed array
+}
 
-function generateSolvedPuzzle() {
-    while (true) {
-        const board = makeEmptyBoard();
+// Get the indices of every water cell on the board
+function getAllWaterCellIndices(board) {
+    const waterCells = [];
+    for (let cellIndex = 0; cellIndex < SIZE * SIZE; cellIndex++) {
+        if (board[cellIndex] === "#") {
+            waterCells.push(cellIndex);
+        }
+    }
+    return waterCells;
+}
 
-        // To-Do List:
-        // randomly create islands
-        // ensure islands do not touch orthogonally
-        // fill remaining cells as water
+// Pick island sizes for one candidate puzzle
+function chooseIslandSizes() {
+    // Simple first version: enough land to break up water, but not packed too tightly
+    const islandCount = 10 + Math.floor(Math.random() * 5); // 8 to 12 islands
+    const sizes = [];
 
-        if (has2x2Water(board)) continue;
-        if (!isWaterConnected(board)) continue;
+    for (let i = 0; i < islandCount; i++) {
+        const size = 1 + Math.floor(Math.random() * 6); // island size 1 to 6
+        sizes.push(size);
+    }
+
+    return sizes;  // an array that looks like this: [2, 1, 7, 2, 3, 3, 1, 9]
+}
+
+// Try to build one complete solved board candidate
+function buildCandidateSolution() {
+    const board = makeEmptyBoard();
+    const islandSizes = chooseIslandSizes();
+    const islands = [];
+
+    // Loop through all islands by their size clue number
+    for (const size of islandSizes) {
+        // Choose random water tile to start building from
+        const possibleStarts = shuffle(getAllWaterCellIndices(board));
+        let placedIsland = null;
+
+        // Try different starting cells until this island successfully grows
+        for (const startCellIndex of possibleStarts) {
+            // Try to grow island of desired size from starting water cell
+            const island = growIsland(board, startCellIndex, size);
+            // If island couldn't grow from water cell, try another starting water cell
+            if (island !== null) {
+                placedIsland = island;
+                break;
+            }
+        }
+
+        // If this island could not be placed from any water tile, abandon this whole candidate
+        if (placedIsland === null) {
+            return null;
+        }
+
+        // Add successfully placed island into island list
+        islands.push(placedIsland);
+    }
+
+    // Turn one cell in each island into its clue number (this ends up being the random tile where the island started and grew from)
+    for (const island of islands) {
+        placeIsland(board, island, island.length);
+    }
+
+    return board;
+}
+
+function generateSolvedPuzzle(maxAttempts = 10000) {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const board = buildCandidateSolution();
+
+        if (board === null) continue;
         if (!isValidFinishedBoard(board)) continue;
 
         return toString(board);
     }
+
+    return null;
 }
 
 //------------------------------------------------------
@@ -557,11 +642,18 @@ function generateSolvedPuzzle() {
 
 //-------------------------------------------------------------------------------------------------------------
 
-board = makeEmptyBoard();
+// board = makeEmptyBoard();
 
-const island = growIsland(board, 40, 5);
+// const island = growIsland(board, 40, 5);
 
-console.log(island);
-console.log(toString(board));
+// console.log(island);
+// console.log(toString(board));
+
+//-------------------------------------------------------------------------------------------------------------
+
+solpuz = generateSolvedPuzzle(10000000);
+puzzle = solutionToStarting(solpuz);
+console.log(puzzle);
+console.log(solpuz);
 
 //console.log(toString(board));
