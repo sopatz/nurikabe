@@ -585,6 +585,7 @@ function buildCandidateSolution() {
 function generateSolvedPuzzle(maxAttempts = 10000) {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
         const board = buildCandidateSolution();
+        if (attempt % 10000 === 0) console.log(`Attempt: ${attempt}`);
 
         if (board === null) continue;
         if (!isValidFinishedBoard(board)) continue;
@@ -594,6 +595,10 @@ function generateSolvedPuzzle(maxAttempts = 10000) {
 
     return null;
 }
+
+// TO-DO:
+//   -make it faster
+//   -ensure each puzzle only has one solution
 
 //------------------------------------------------------
 
@@ -651,9 +656,9 @@ function generateSolvedPuzzle(maxAttempts = 10000) {
 
 //-------------------------------------------------------------------------------------------------------------
 
-solpuz = generateSolvedPuzzle(10000000);
-puzzle = solutionToStarting(solpuz);
-console.log(puzzle);
-console.log(solpuz);
+// solpuz = generateSolvedPuzzle(10000000);
+// puzzle = solutionToStarting(solpuz);
+// console.log(puzzle);
+// console.log(solpuz);
 
 //console.log(toString(board));

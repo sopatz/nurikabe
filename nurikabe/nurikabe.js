@@ -101,7 +101,7 @@ function setup() {
 
   //Create a button to solve the puzzle for testing
   let solveButton = createButton('Solve');
-  solveButton.position(10, 160);
+  solveButton.position(10, 310);
   solveButton.mousePressed(solve);
 
   let hintButton = createButton('Hint');
@@ -114,8 +114,11 @@ function setup() {
   selectedPuzzle = puzzles[randomKey]; //select the puzzle with this random key
 
   // format the puzzle start and puzzle solution like we need to use it: 
-  window.cantClick = generateStartingColors(selectedPuzzle.puzzle); //cantClick = map(square index, value)
-  window.solution_colors = generateSolutionColors(selectedPuzzle.solpuz); //solution_colors = array (0 for water, 1 for land, size 81)
+  // window.cantClick = generateStartingColors(selectedPuzzle.puzzle); //cantClick = map(square index, value)
+  // window.solution_colors = generateSolutionColors(selectedPuzzle.solpuz); //solution_colors = array (0 for water, 1 for land, size 81)
+  solpuz = generateSolvedPuzzle(10000000);
+  window.cantClick = generateStartingColors(solutionToStarting(solpuz)); //cantClick = map(square index, value)
+  window.solution_colors = generateSolutionColors(solpuz); //solution_colors = array (0 for water, 1 for land, size 81)
 
   // Here is how the puzzle start and puzzle solution state is stored after generateStartingColors and generateSolutionColors:
   //   cantClick: new Map([
