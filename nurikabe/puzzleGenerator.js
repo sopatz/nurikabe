@@ -536,7 +536,7 @@ function chooseIslandSizes() {
 
     while (totalLand < targetLand) {
         const remaining = targetLand - totalLand;  // remaining number of land squares to fill on the board
-        const maxSize = Math.min(9, remaining);  // max size of island is either number listed here or 'remaining', whichever is smaller
+        const maxSize = Math.min(6, remaining);  // max size of island is either number listed here or 'remaining', whichever is smaller
         const size = 1 + Math.floor(Math.random() * maxSize);  // choose random island size from 1-max
 
         sizes.push(size);  // add island size to list of island sizes
@@ -830,6 +830,352 @@ function countSolutions(startingPuzzle, maxSolutions = 2) {
     return solutions;
 }
 
+function getClues(board) {
+    const clues = [];
+
+    for (let i = 0; i < board.length; i++) {
+        const value = clueToNumber(board[i]);
+        if (value !== null) {
+            clues.push({
+                index: i,
+                value,
+                cell: board[i],
+            });
+        }
+    }
+
+    return clues;
+}
+
+function cellTouchesOtherClue(board, cellIndex, ownClueIndex) {
+    for (const neighborIndex of getNeighborCellIndices(cellIndex)) {
+        if (neighborIndex === ownClueIndex) continue;
+        if (isClue(board[neighborIndex])) return true;
+    }
+
+    return false;
+}
+
+function generateIslandShapesForClue(board, clueIndex, targetSize) {
+    const results = [];
+    const seen = new Set();
+
+    function signature(cells) {
+        return [...cells].sort((a, b) => a - b).join(",");
+    }
+
+    function search(cells) {
+        const sig = signature(cells);
+        if (seen.has(sig)) return;
+        seen.add(sig);
+
+        if (cells.size === targetSize) {
+            results.push([...cells]);
+            return;
+        }
+
+        const candidates = new Set();
+
+        for (const cellIndex of cells) {
+            for (const neighborIndex of getNeighborCellIndices(cellIndex)) {
+                if (cells.has(neighborIndex)) continue;
+
+                const cell = board[neighborIndex];
+
+                if (isClue(cell) && neighborIndex !== clueIndex) continue;
+                if (cellTouchesOtherClue(board, neighborIndex, clueIndex)) continue;
+
+                candidates.add(neighborIndex);
+            }
+        }
+
+        for (const candidate of candidates) {
+            const nextCells = new Set(cells);
+            nextCells.add(candidate);
+            search(nextCells);
+        }
+    }
+
+    search(new Set([clueIndex]));
+
+    return results;
+}
+
+function shapesAreCompatible(shape, occupied) {
+    for (const cellIndex of shape) {
+        if (occupied.has(cellIndex)) return false;
+
+        for (const neighborIndex of getNeighborCellIndices(cellIndex)) {
+            if (occupied.has(neighborIndex)) return false;
+        }
+    }
+
+    return true;
+}
+
+function shapeToMask(shape) {
+    let mask = 0n;
+
+    for (const cellIndex of shape) {
+        mask |= 1n << BigInt(cellIndex);
+    }
+
+    return mask;
+}
+
+function shapeTouchMask(shape) {
+    let mask = 0n;
+
+    for (const cellIndex of shape) {
+        mask |= 1n << BigInt(cellIndex);
+
+        for (const neighborIndex of getNeighborCellIndices(cellIndex)) {
+            mask |= 1n << BigInt(neighborIndex);
+        }
+    }
+
+    return mask;
+}
+
+function getAllCellsMask() {
+    let mask = 0n;
+
+    for (let i = 0; i < SIZE * SIZE; i++) {
+        mask |= 1n << BigInt(i);
+    }
+
+    return mask;
+}
+
+const ALL_CELLS_MASK = getAllCellsMask();
+
+function get2x2Masks() {
+    const masks = [];
+
+    for (let row = 0; row < SIZE - 1; row++) {
+        for (let col = 0; col < SIZE - 1; col++) {
+            let mask = 0n;
+
+            mask |= 1n << BigInt(index(row, col));
+            mask |= 1n << BigInt(index(row, col + 1));
+            mask |= 1n << BigInt(index(row + 1, col));
+            mask |= 1n << BigInt(index(row + 1, col + 1));
+
+            masks.push(mask);
+        }
+    }
+
+    return masks;
+}
+
+const WATER_2X2_MASKS = get2x2Masks();
+
+function hasForced2x2Water(landMask, possibleFutureLandMask) {
+    const maybeLandMask = landMask | possibleFutureLandMask;
+
+    for (const blockMask of WATER_2X2_MASKS) {
+        if ((maybeLandMask & blockMask) === 0n) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function bitFor(index) {
+    return 1n << BigInt(index);
+}
+
+function countBits(mask) {
+    let count = 0;
+
+    while (mask !== 0n) {
+        mask &= mask - 1n;
+        count++;
+    }
+
+    return count;
+}
+
+function getIndicesFromMask(mask) {
+    const indices = [];
+    let index = 0;
+
+    while (mask !== 0n) {
+        if ((mask & 1n) !== 0n) {
+            indices.push(index);
+        }
+
+        mask >>= 1n;
+        index++;
+    }
+
+    return indices;
+}
+
+function areShapeObjectsCompatible(shapeA, shapeB) {
+    return (shapeA.blockedMask & shapeB.landMask) === 0n;
+}
+
+function countSolutionsByIslands(startingPuzzle, maxSolutions = 2) {
+    const board = typeof startingPuzzle === "string"
+        ? startingPuzzle.split("")
+        : [...startingPuzzle];
+
+    const clues = getClues(board);
+
+    const clueOptions = clues.map(clue => {
+        const shapes = generateIslandShapesForClue(board, clue.index, clue.value)
+            .map(shape => ({
+                cells: shape,
+                landMask: shapeToMask(shape),
+                blockedMask: shapeTouchMask(shape),
+            }));
+
+        return {
+            clue,
+            shapes,
+            allShapeMask: (1n << BigInt(shapes.length)) - 1n,
+        };
+    });
+
+    // compatibleShapeMasks[a][shapeIndex][b] = bitmask of shapes in b compatible with this shape from a
+    const compatibleShapeMasks = clueOptions.map((optionA, optionAIndex) => {
+        return optionA.shapes.map(shapeA => {
+            return clueOptions.map((optionB, optionBIndex) => {
+                if (optionAIndex === optionBIndex) return 0n;
+
+                let mask = 0n;
+
+                for (let shapeBIndex = 0; shapeBIndex < optionB.shapes.length; shapeBIndex++) {
+                    const shapeB = optionB.shapes[shapeBIndex];
+
+                    if (areShapeObjectsCompatible(shapeA, shapeB)) {
+                        mask |= bitFor(shapeBIndex);
+                    }
+                }
+
+                return mask;
+            });
+        });
+    });
+
+    let solutions = 0;
+    const chosen = [];
+
+    function getPossibleFutureLandMask(possibleMasks, usedOptions) {
+        let mask = 0n;
+
+        for (let optionIndex = 0; optionIndex < clueOptions.length; optionIndex++) {
+            if (usedOptions.has(optionIndex)) continue;
+
+            for (const shapeIndex of getIndicesFromMask(possibleMasks[optionIndex])) {
+                mask |= clueOptions[optionIndex].shapes[shapeIndex].landMask;
+            }
+        }
+
+        return mask;
+    }
+
+    function chooseNextOption(possibleMasks, usedOptions) {
+        let bestOptionIndex = -1;
+        let bestCount = Infinity;
+
+        for (let optionIndex = 0; optionIndex < clueOptions.length; optionIndex++) {
+            if (usedOptions.has(optionIndex)) continue;
+
+            const count = countBits(possibleMasks[optionIndex]);
+
+            if (count === 0) {
+                return optionIndex;
+            }
+
+            if (count < bestCount) {
+                bestCount = count;
+                bestOptionIndex = optionIndex;
+            }
+        }
+
+        return bestOptionIndex;
+    }
+
+    function search(landMask, possibleMasks, usedOptions) {
+        if (solutions >= maxSolutions) return;
+
+        const possibleFutureLandMask = getPossibleFutureLandMask(possibleMasks, usedOptions);
+        if (hasForced2x2Water(landMask, possibleFutureLandMask)) return;
+
+        if (usedOptions.size === clueOptions.length) {
+            const finished = Array(SIZE * SIZE).fill("#");
+
+            for (const { optionIndex, shapeIndex } of chosen) {
+                const clue = clueOptions[optionIndex].clue;
+                const shape = clueOptions[optionIndex].shapes[shapeIndex];
+
+                for (const cellIndex of shape.cells) {
+                    finished[cellIndex] = " ";
+                }
+
+                finished[clue.index] = clue.cell;
+            }
+
+            if (isValidFinishedBoard(finished)) {
+                solutions++;
+            }
+
+            return;
+        }
+
+        const optionIndex = chooseNextOption(possibleMasks, usedOptions);
+        const shapeMask = possibleMasks[optionIndex];
+
+        if (shapeMask === 0n) return;
+
+        usedOptions.add(optionIndex);
+
+        for (const shapeIndex of getIndicesFromMask(shapeMask)) {
+            const shape = clueOptions[optionIndex].shapes[shapeIndex];
+            const nextPossibleMasks = [...possibleMasks];
+
+            let deadBranch = false;
+
+            for (let otherOptionIndex = 0; otherOptionIndex < clueOptions.length; otherOptionIndex++) {
+                if (usedOptions.has(otherOptionIndex)) continue;
+
+                nextPossibleMasks[otherOptionIndex] &=
+                    compatibleShapeMasks[optionIndex][shapeIndex][otherOptionIndex];
+
+                if (nextPossibleMasks[otherOptionIndex] === 0n) {
+                    deadBranch = true;
+                    break;
+                }
+            }
+
+            if (!deadBranch) {
+                chosen.push({ optionIndex, shapeIndex });
+
+                search(
+                    landMask | shape.landMask,
+                    nextPossibleMasks,
+                    usedOptions
+                );
+
+                chosen.pop();
+            }
+
+            if (solutions >= maxSolutions) break;
+        }
+
+        usedOptions.delete(optionIndex);
+    }
+
+    const initialPossibleMasks = clueOptions.map(option => option.allShapeMask);
+
+    search(0n, initialPossibleMasks, new Set());
+
+    return solutions;
+}
+
 function generateSolvedPuzzle(maxAttempts = 10000) {
     // Add fail counters for testing purposes
     const failReasons = {
@@ -865,9 +1211,10 @@ function generateSolvedPuzzle(maxAttempts = 10000) {
 
         const solutionString = toString(board);
         const startingPuzzle = solutionToStarting(solutionString);
+        printShapeCounts(startingPuzzle);
 
-        // // Make sure there is only 1 solution
-        // if (countSolutions(startingPuzzle, 2) !== 1) continue;
+        // Make sure there is only 1 solution
+        if (countSolutionsByIslands(startingPuzzle, 2) !== 1) continue;
 
         console.log(failReasons);
         return solutionString;
@@ -875,6 +1222,20 @@ function generateSolvedPuzzle(maxAttempts = 10000) {
 
     console.log(failReasons);
     return null;
+}
+
+function printShapeCounts(puzzle) {
+    const board = puzzle.split("");
+    const clues = getClues(board);
+
+    const counts = clues.map(clue => ({
+        clue: clue.cell,
+        index: clue.index,
+        shapes: generateIslandShapesForClue(board, clue.index, clue.value).length,
+    }));
+
+    counts.sort((a, b) => b.shapes - a.shapes);
+    console.log(counts);
 }
 
 // TO-DO:
@@ -937,12 +1298,18 @@ function generateSolvedPuzzle(maxAttempts = 10000) {
 
 //-------------------------------------------------------------------------------------------------------------
 
-solpuz = generateSolvedPuzzle(10000000);
-puzzle = solutionToStarting(solpuz);
-console.log(puzzle);
-console.log(solpuz);
+// solpuz = generateSolvedPuzzle(10000000);
+// puzzle = solutionToStarting(solpuz);
+// console.log(puzzle);
+// console.log(solpuz);
+// printShapeCounts(puzzle);
 
-console.log(countSolutions(puzzle, 2) === 1);
+// console.log(countSolutionsByIslands(puzzle, 2) === 1);
 
-puzzle = ".........4.........2............4...3.......5...7............5.........3.........";
-console.log(countSolutions(puzzle, 2) === 1);
+// puzzle = ".........4.........2............4...3.......5...7............5.........3.........";
+// printShapeCounts(puzzle);
+// console.log(countSolutionsByIslands(puzzle, 2) === 1);
+
+puzzle = "1............3.3..1.5.....1.....6......................2...3.5..........1..1....4";
+printShapeCounts(puzzle);
+console.log(countSolutionsByIslands(puzzle, 2) === 1);
