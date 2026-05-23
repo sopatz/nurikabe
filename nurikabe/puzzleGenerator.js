@@ -639,6 +639,197 @@ function buildCandidateSolution() {
     return board;
 }
 
+// Check if cell in starting puzzle starts as water (meaning its correct state is unknown to the user) 
+function isUnknown(cell) {
+    return cell === ".";
+}
+
+// Get the indices of all unknown cells in the starting puzzle
+function getUnknownIndices(board) {
+    const unknowns = [];
+    for (let i = 0; i < board.length; i++) {
+        if (isUnknown(board[i])) {
+            unknowns.push(i);
+        }
+    }
+    return unknowns;
+}
+
+// Calculate the amount of land in the puzzle by adding up the clue numbers
+function getRequiredLandCount(board) {
+    let total = 0;
+    for (const cell of board) {
+        const value = clueToNumber(cell);
+        if (value !== null) {
+            total += value;
+        }
+    }
+    return total;
+}
+
+// Count the number of cells that are a certain character
+function countCellType(board, target) {
+    let count = 0;
+    for (const cell of board) {
+        if (cell === target) count++;
+    }
+    return count;
+}
+
+// Rejects partial boards while they are being solved
+function isPartialValidBoard(board) {
+    if (has2x2Water(board)) return false;  // obvious first check
+
+    const requiredLand = getRequiredLandCount(board);
+    const currentLand = board.filter(cell => cell === " " || isClue(cell)).length;  // count how many cells in the puzzle are currently land
+    const unknowns = countCellType(board, ".");  // count how many cells in the puzzle are currently unknown
+
+    if (currentLand > requiredLand) return false;  // too much land on current attempt --> not valid board
+    if (currentLand + unknowns < requiredLand) return false;  // even if all unknowns become land, there still won't be enough land --> not valid board
+
+    const islands = getLandRegions(board);
+
+    // Make sure no islands are connected and each island is the correct size
+    for (const island of islands) {
+        const clueCount = countCluesInIsland(board, island);
+
+        // A known land region can never contain multiple clues
+        if (clueCount > 1) return false;
+
+        // Make sure island does not have more land cells than its clue number says
+        if (clueCount === 1) {
+            const clueValue = getClueValueInIsland(board, island);
+            if (island.length > clueValue) return false;
+
+            const reachable = countReachableForIsland(board, island);
+            if (reachable < clueValue) return false;
+        }
+    }
+
+    return true;  // if nothing fails than we good
+}
+
+// Helper function to count the number of unknown cells reachable from island
+function countReachableForIsland(board, island) {
+    const clueValue = getClueValueInIsland(board, island);
+    if (clueValue === null) return Infinity;
+
+    const visited = new Set();
+    const stack = [...island];
+
+    // Mark every cell in the island as already visited
+    for (const [row, col] of island) {
+        visited.add(index(row, col));
+    }
+
+    // Take random visited cell, and add its unknown neighbors to visited set if not in the visited set already
+    while (stack.length > 0) {
+        const [row, col] = stack.pop();
+
+        for (const [neighRow, neighCol] of getNeighbors(row, col)) {
+            const neighIndex = index(neighRow, neighCol);
+            if (visited.has(neighIndex)) continue;
+
+            const cell = getCell(board, neighRow, neighCol);
+
+            // Can grow through unknown cells only
+            if (cell === ".") {
+                visited.add(neighIndex);
+                stack.push([neighRow, neighCol]);
+            }
+        }
+    }
+
+    return visited.size;
+}
+
+// Pick unknown cell to solve from (pick state for it) that is next to an existing land region
+function chooseNextUnknownIndex(board) {
+    let fallback = -1;
+
+    for (let i = 0; i < board.length; i++) {
+        if (board[i] !== ".") continue;
+
+        if (fallback === -1) fallback = i;
+
+        for (const neighborIndex of getNeighborCellIndices(i)) {
+            if (isLand(board[neighborIndex])) {
+                return i;
+            }
+        }
+    }
+
+    return fallback;
+}
+
+// Count how many solutions a starting puzzle state has (we want this to return 1)
+function countSolutions(startingPuzzle, maxSolutions = 2) {
+    const board = typeof startingPuzzle === "string"
+        ? startingPuzzle.split("")
+        : [...startingPuzzle];
+
+    const requiredLand = getRequiredLandCount(board);
+    let solutions = 0;
+
+    // Recursive solving function
+    function solve() {
+        if (solutions >= maxSolutions) return;  // stop once more than 1 solution is found
+
+        // Make sure current land/water counts are valid based on the required amount of land in the puzzle
+        const currentLand = board.filter(cell => cell === " " || isClue(cell)).length;
+        const unknowns = countCellType(board, ".");
+        if (currentLand > requiredLand) return;
+        if (currentLand + unknowns < requiredLand) return;
+
+        // If all remaining unknowns must be water, finish immediately
+        if (currentLand === requiredLand) {
+            const finished = board.map(cell => cell === "." ? "#" : cell);
+            if (isValidFinishedBoard(finished)) {
+                solutions++;
+            }
+            return;
+        }
+
+        // If all remaining unknowns must be land, finish immediately
+        if (currentLand + unknowns === requiredLand) {
+            const finished = board.map(cell => cell === "." ? " " : cell);
+            if (isValidFinishedBoard(finished)) {
+                solutions++;
+            }
+            return;
+        }
+
+        const unknownIndex = chooseNextUnknownIndex(board);
+
+        // No unknown cells left, so check if this is a finished valid board
+        if (unknownIndex === -1) {
+            if (isValidFinishedBoard(board)) {
+                solutions++;
+            }
+            return;
+        }
+
+        // Try water first
+        board[unknownIndex] = "#";
+        if (isPartialValidBoard(board)) {
+            solve();
+        }
+
+        // Try land second
+        board[unknownIndex] = " ";
+        if (isPartialValidBoard(board)) {
+            solve();
+        }
+
+        // Restore unknown cell (backtrack when neither land or water lead to a valid board for the unknown cell we are currently testing)
+        board[unknownIndex] = ".";
+    }
+
+    solve();
+
+    return solutions;
+}
+
 function generateSolvedPuzzle(maxAttempts = 10000) {
     // Add fail counters for testing purposes
     const failReasons = {
@@ -672,8 +863,14 @@ function generateSolvedPuzzle(maxAttempts = 10000) {
             continue;
         }
 
+        const solutionString = toString(board);
+        const startingPuzzle = solutionToStarting(solutionString);
+
+        // // Make sure there is only 1 solution
+        // if (countSolutions(startingPuzzle, 2) !== 1) continue;
+
         console.log(failReasons);
-        return toString(board);
+        return solutionString;
     }
 
     console.log(failReasons);
@@ -740,9 +937,12 @@ function generateSolvedPuzzle(maxAttempts = 10000) {
 
 //-------------------------------------------------------------------------------------------------------------
 
-// solpuz = generateSolvedPuzzle(10000000);
-// puzzle = solutionToStarting(solpuz);
-// console.log(puzzle);
-// console.log(solpuz);
+solpuz = generateSolvedPuzzle(10000000);
+puzzle = solutionToStarting(solpuz);
+console.log(puzzle);
+console.log(solpuz);
 
-//console.log(toString(board));
+console.log(countSolutions(puzzle, 2) === 1);
+
+puzzle = ".........4.........2............4...3.......5...7............5.........3.........";
+console.log(countSolutions(puzzle, 2) === 1);
