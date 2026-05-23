@@ -530,22 +530,74 @@ function getAllWaterCellIndices(board) {
 
 // Pick island sizes for one candidate puzzle
 function chooseIslandSizes() {
-    // Simple first version: enough land to break up water, but not packed too tightly
-    const islandCount = 10 + Math.floor(Math.random() * 5); // 8 to 12 islands
     const sizes = [];
+    const targetLand = 34 + Math.floor(Math.random() * 7); // 34 to 40 land cells
+    let totalLand = 0;
 
-    for (let i = 0; i < islandCount; i++) {
-        const size = 1 + Math.floor(Math.random() * 6); // island size 1 to 6
-        sizes.push(size);
+    while (totalLand < targetLand) {
+        const remaining = targetLand - totalLand;  // remaining number of land squares to fill on the board
+        const maxSize = Math.min(9, remaining);  // max size of island is either number listed here or 'remaining', whichever is smaller
+        const size = 1 + Math.floor(Math.random() * maxSize);  // choose random island size from 1-max
+
+        sizes.push(size);  // add island size to list of island sizes
+        totalLand += size;  // add amount of land from new island to total land count
     }
 
-    return sizes;  // an array that looks like this: [2, 1, 7, 2, 3, 3, 1, 9]
+    return sizes;
+}
+
+// Return the 4 cell indices of the first 2x2 water block found
+function findFirst2x2WaterBlock(board) {
+    for (let row = 0; row < SIZE - 1; row++) {
+        for (let col = 0; col < SIZE - 1; col++) {
+            const cells = [
+                index(row, col),
+                index(row, col + 1),
+                index(row + 1, col),
+                index(row + 1, col + 1),
+            ];
+
+            if (cells.every(cellIndex => board[cellIndex] === "#")) {
+                return cells;
+            }
+        }
+    }
+    return null;  // no 2x2 water blocks in board
+}
+
+// Add size-1 islands until there are no 2x2 water blocks
+function repair2x2WaterBlocks(board, islands) {
+    while (true) {
+        const waterBlock = findFirst2x2WaterBlock(board);
+
+        // No 2x2 water left --> repair succeeded
+        if (waterBlock === null) {
+            return true;
+        }
+
+        let repaired = false;
+
+        // Try placing a 1-cell island in one of the cells of this 2x2 water block
+        for (const cellIndex of shuffle(waterBlock)) {
+            if (canPlaceIslandCell(board, [], cellIndex)) {
+                board[cellIndex] = " ";  // change cell to land
+                islands.push([cellIndex]);  // add new land cell as island
+                repaired = true;  // this water block is repaired yay
+                break;
+            }
+        }
+
+        // Could not legally break this 2x2 water block --> repair fails
+        if (!repaired) {
+            return false;
+        }
+    }
 }
 
 // Try to build one complete solved board candidate
 function buildCandidateSolution() {
     const board = makeEmptyBoard();
-    const islandSizes = chooseIslandSizes();
+    const islandSizes = chooseIslandSizes().sort((a, b) => b - a);
     const islands = [];
 
     // Loop through all islands by their size clue number
@@ -574,6 +626,11 @@ function buildCandidateSolution() {
         islands.push(placedIsland);
     }
 
+    // Actively fix 2x2 water instead of hoping validation passes for less attempts hopefully
+    if (!repair2x2WaterBlocks(board, islands)) {
+        return null;
+    }
+
     // Turn one cell in each island into its clue number (this ends up being the random tile where the island started and grew from)
     for (const island of islands) {
         placeIsland(board, island, island.length);
@@ -583,16 +640,43 @@ function buildCandidateSolution() {
 }
 
 function generateSolvedPuzzle(maxAttempts = 10000) {
+    // Add fail counters for testing purposes
+    const failReasons = {
+        nullBoard: 0,
+        twoByTwoWater: 0,
+        disconnectedWater: 0,
+        invalidFinished: 0,
+    };
+    
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
         const board = buildCandidateSolution();
         if (attempt % 10000 === 0) console.log(`Attempt: ${attempt}`);
 
-        if (board === null) continue;
-        if (!isValidFinishedBoard(board)) continue;
+        if (board === null) {
+            failReasons.nullBoard++;
+            continue;
+        }
 
+        if (has2x2Water(board)) {
+            failReasons.twoByTwoWater++;
+            continue;
+        }
+
+        if (!isWaterConnected(board)) {
+            failReasons.disconnectedWater++;
+            continue;
+        }
+
+        if (!isValidFinishedBoard(board)) {
+            failReasons.invalidFinished++;
+            continue;
+        }
+
+        console.log(failReasons);
         return toString(board);
     }
 
+    console.log(failReasons);
     return null;
 }
 
