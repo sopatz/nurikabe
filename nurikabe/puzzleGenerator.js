@@ -384,14 +384,58 @@ function makeEmptyBoard() {
 }
 
 // Place island at certain indices of puzzle string
-function placeIsland(board, cells, clueValue) {
-    const clueIndex = cells[0];
-
+function placeIslandWithClue(board, cells, clueIndex, clueValue) {
     for (const cellIndex of cells) {
         board[cellIndex] = " ";
     }
-
     board[clueIndex] = clueValue.toString(16).toUpperCase();
+}
+
+function chooseBestCluePositions(islands) {
+    let cluePositions = islands.map(island => island[0]);
+
+    // Do a few passes because clue choices affect each other
+    for (let pass = 0; pass < 1; pass++) {
+        const clueBoard = Array(SIZE * SIZE).fill(".");
+
+        for (let i = 0; i < islands.length; i++) {
+            clueBoard[cluePositions[i]] = islands[i].length.toString(16).toUpperCase();
+        }
+
+        for (let islandIndex = 0; islandIndex < islands.length; islandIndex++) {
+            const island = islands[islandIndex];
+
+            if (island.length === 1) {
+                cluePositions[islandIndex] = island[0];
+                continue;
+            }
+
+            let bestCell = cluePositions[islandIndex];
+            let bestShapeCount = Infinity;
+
+            for (const candidateCell of island) {
+                const testBoard = [...clueBoard];
+                testBoard[cluePositions[islandIndex]] = ".";
+                testBoard[candidateCell] = island.length.toString(16).toUpperCase();
+
+                const shapeCount = generateIslandShapesForClue(
+                    testBoard,
+                    candidateCell,
+                    island.length,
+                    100
+                ).length;
+
+                if (shapeCount < bestShapeCount) {
+                    bestShapeCount = shapeCount;
+                    bestCell = candidateCell;
+                }
+            }
+
+            cluePositions[islandIndex] = bestCell;
+        }
+    }
+
+    return cluePositions;
 }
 
 // Check if land (island) square can be placed at given index
@@ -528,16 +572,85 @@ function getAllWaterCellIndices(board) {
     return waterCells;
 }
 
+// Choose random number between 2 numbers on a bell curve
+function randomBellCurveInt(min, max) {
+    let u = 0, v = 0;
+    // Box-Muller transform to get a value from a standard normal distribution
+    while(u === 0) u = Math.random(); // Converting [0,1) to (0,1)
+    while(v === 0) v = Math.random();
+    let num = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+
+    // Standard deviation adjustment: 
+    // Dividing by 6.0 ensures ~99.7% of values fall within the range
+    num = num / 6.0 + 0.5; 
+
+    // Resample if the value falls outside [0, 1]
+    if (num > 1 || num < 0) return randomBellCurveInt(min, max);
+
+    // Scale to range and round
+    return Math.round(num * (max - min) + min);
+}
+
+function getShapeCountStats(puzzle, maxPerClue = 1501, maxTotal = 6001) {
+    const board = puzzle.split("");
+    const clues = getClues(board);
+
+    const counts = [];
+    let total = 0;
+    let max = 0;
+
+    for (const clue of clues) {
+        const count = generateIslandShapesForClue(
+            board,
+            clue.index,
+            clue.value,
+            maxPerClue
+        ).length;
+
+        counts.push(count);
+        total += count;
+        max = Math.max(max, count);
+
+        if (count >= maxPerClue || total >= maxTotal) {
+            return {
+                total,
+                max,
+                counts,
+                tooExpensive: true,
+            };
+        }
+    }
+
+    return {
+        total,
+        max,
+        counts,
+        tooExpensive: false,
+    };
+}
+
+function isCheapEnoughToSolve(puzzle) {
+    const stats = getShapeCountStats(puzzle, 1501, 6001);
+    return !stats.tooExpensive;
+}
+
 // Pick island sizes for one candidate puzzle
 function chooseIslandSizes() {
     const sizes = [];
-    const targetLand = 34 + Math.floor(Math.random() * 7); // 34 to 40 land cells
+    const targetLand = randomBellCurveInt(24, 42); // 24 to 42 land cells
     let totalLand = 0;
 
     while (totalLand < targetLand) {
         const remaining = targetLand - totalLand;  // remaining number of land squares to fill on the board
-        const maxSize = Math.min(6, remaining);  // max size of island is either number listed here or 'remaining', whichever is smaller
-        const size = 1 + Math.floor(Math.random() * maxSize);  // choose random island size from 1-max
+        const maxSize = Math.min(9, remaining);  // max size of island is either number listed here or 'remaining', whichever is smaller
+        let size;
+
+        // Most islands are small/medium, sometimes can be large
+        if (Math.random() < 0.75 || maxSize < 6) {
+            size = randomBellCurveInt(1, Math.min(5, maxSize));
+        } else {
+            size = randomBellCurveInt(6, maxSize);
+        }
 
         sizes.push(size);  // add island size to list of island sizes
         totalLand += size;  // add amount of land from new island to total land count
@@ -631,12 +744,13 @@ function buildCandidateSolution() {
         return null;
     }
 
-    // Turn one cell in each island into its clue number (this ends up being the random tile where the island started and grew from)
-    for (const island of islands) {
-        placeIsland(board, island, island.length);
-    }
+    // Turn one cell in each island into its clue number (chooses the tile leading to the least number of shape options for the island when searching for solutions)
+    // const cluePositions = chooseBestCluePositions(islands);
+    // for (let i = 0; i < islands.length; i++) {
+    //     placeIslandWithClue(board, islands[i], cluePositions[i], islands[i].length);
+    // }
 
-    return board;
+    return { board, islands };
 }
 
 // Check if cell in starting puzzle starts as water (meaning its correct state is unknown to the user) 
@@ -856,7 +970,7 @@ function cellTouchesOtherClue(board, cellIndex, ownClueIndex) {
     return false;
 }
 
-function generateIslandShapesForClue(board, clueIndex, targetSize) {
+function generateIslandShapesForClue(board, clueIndex, targetSize, maxResults = Infinity) {
     const results = [];
     const seen = new Set();
 
@@ -865,6 +979,8 @@ function generateIslandShapesForClue(board, clueIndex, targetSize) {
     }
 
     function search(cells) {
+        if (results.length >= maxResults) return;
+
         const sig = signature(cells);
         if (seen.has(sig)) return;
         seen.add(sig);
@@ -890,6 +1006,8 @@ function generateIslandShapesForClue(board, clueIndex, targetSize) {
         }
 
         for (const candidate of candidates) {
+            if (results.length >= maxResults) return;
+
             const nextCells = new Set(cells);
             nextCells.add(candidate);
             search(nextCells);
@@ -1017,7 +1135,7 @@ function areShapeObjectsCompatible(shapeA, shapeB) {
     return (shapeA.blockedMask & shapeB.landMask) === 0n;
 }
 
-function countSolutionsByIslands(startingPuzzle, maxSolutions = 2) {
+function countSolutionsByIslands(startingPuzzle, maxSolutions = 2, maxNodes = 50000) {
     const board = typeof startingPuzzle === "string"
         ? startingPuzzle.split("")
         : [...startingPuzzle];
@@ -1061,6 +1179,7 @@ function countSolutionsByIslands(startingPuzzle, maxSolutions = 2) {
     });
 
     let solutions = 0;
+    let nodes = 0;
     const chosen = [];
 
     function getPossibleFutureLandMask(possibleMasks, usedOptions) {
@@ -1100,6 +1219,8 @@ function countSolutionsByIslands(startingPuzzle, maxSolutions = 2) {
     }
 
     function search(landMask, possibleMasks, usedOptions) {
+        nodes++;
+        if (nodes > maxNodes) return;
         if (solutions >= maxSolutions) return;
 
         const possibleFutureLandMask = getPossibleFutureLandMask(possibleMasks, usedOptions);
@@ -1183,25 +1304,35 @@ function generateSolvedPuzzle(maxAttempts = 10000) {
         twoByTwoWater: 0,
         disconnectedWater: 0,
         invalidFinished: 0,
+        tooExpensive: 0,
+        notUnique: 0,
     };
+    let puzzNum = 1;
     
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        const board = buildCandidateSolution();
+        const candidate = buildCandidateSolution();
         if (attempt % 10000 === 0) console.log(`Attempt: ${attempt}`);
 
-        if (board === null) {
+        if (candidate === null) {
             failReasons.nullBoard++;
             continue;
         }
 
-        if (has2x2Water(board)) {
+        if (has2x2Water(candidate.board)) {
             failReasons.twoByTwoWater++;
             continue;
         }
 
-        if (!isWaterConnected(board)) {
+        if (!isWaterConnected(candidate.board)) {
             failReasons.disconnectedWater++;
             continue;
+        }
+
+        const board = [...candidate.board];
+        const cluePositions = chooseBestCluePositions(candidate.islands);
+
+        for (let i = 0; i < candidate.islands.length; i++) {
+            placeIslandWithClue(board, candidate.islands[i], cluePositions[i], candidate.islands[i].length);
         }
 
         if (!isValidFinishedBoard(board)) {
@@ -1211,10 +1342,18 @@ function generateSolvedPuzzle(maxAttempts = 10000) {
 
         const solutionString = toString(board);
         const startingPuzzle = solutionToStarting(solutionString);
-        printShapeCounts(startingPuzzle);
+        console.log(`Analyzing solution uniqueness for valid puzzle #${puzzNum++}...`);
+        //printShapeCounts(startingPuzzle);
 
-        // Make sure there is only 1 solution
-        if (countSolutionsByIslands(startingPuzzle, 2) !== 1) continue;
+        if (!isCheapEnoughToSolve(startingPuzzle)) {
+            failReasons.tooExpensive++;
+            continue;
+        }
+
+        if (countSolutionsByIslands(startingPuzzle, 2, 50000) !== 1) {
+            failReasons.notUnique++;
+            continue;
+        }
 
         console.log(failReasons);
         return solutionString;
@@ -1302,7 +1441,7 @@ function printShapeCounts(puzzle) {
 // puzzle = solutionToStarting(solpuz);
 // console.log(puzzle);
 // console.log(solpuz);
-// printShapeCounts(puzzle);
+//printShapeCounts(puzzle);
 
 // console.log(countSolutionsByIslands(puzzle, 2) === 1);
 
@@ -1310,6 +1449,12 @@ function printShapeCounts(puzzle) {
 // printShapeCounts(puzzle);
 // console.log(countSolutionsByIslands(puzzle, 2) === 1);
 
-puzzle = "1............3.3..1.5.....1.....6......................2...3.5..........1..1....4";
-printShapeCounts(puzzle);
-console.log(countSolutionsByIslands(puzzle, 2) === 1);
+// puzzle = "1............3.3..1.5.....1.....6......................2...3.5..........1..1....4";
+// printShapeCounts(puzzle);
+// console.log(countSolutionsByIslands(puzzle, 2) === 1);
+
+// console.log(randomBellCurveInt(24, 42));
+// console.log(randomBellCurveInt(24, 42));
+// console.log(randomBellCurveInt(24, 42));
+// console.log(randomBellCurveInt(24, 42));
+// console.log(randomBellCurveInt(24, 42));

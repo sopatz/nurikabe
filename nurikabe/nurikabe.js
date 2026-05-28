@@ -19,7 +19,7 @@ let hintSquares = []; let cantBeHint = [];
 
 function preload() {
   console.log("Attempting to load puzzles");
-  puzzles = loadJSON('nuriGenerateTest.json', () => {
+  puzzles = loadJSON('nurikabePuzzles.json', () => {
     console.log("Puzzles loaded successfully");
   }, () => {
     console.log("Failed to load puzzles");
@@ -114,11 +114,11 @@ function setup() {
   selectedPuzzle = puzzles[randomKey]; //select the puzzle with this random key
 
   // format the puzzle start and puzzle solution like we need to use it: 
-  window.cantClick = generateStartingColors(selectedPuzzle.puzzle); //cantClick = map(square index, value)
-  window.solution_colors = generateSolutionColors(selectedPuzzle.solpuz); //solution_colors = array (0 for water, 1 for land, size 81)
-  // solpuz = generateSolvedPuzzle(10000000);
-  // window.cantClick = generateStartingColors(solutionToStarting(solpuz)); //cantClick = map(square index, value)
-  // window.solution_colors = generateSolutionColors(solpuz); //solution_colors = array (0 for water, 1 for land, size 81)
+  // window.cantClick = generateStartingColors(selectedPuzzle.puzzle); //cantClick = map(square index, value)
+  // window.solution_colors = generateSolutionColors(selectedPuzzle.solpuz); //solution_colors = array (0 for water, 1 for land, size 81)
+  solpuz = generateSolvedPuzzle(10000000);
+  window.cantClick = generateStartingColors(solutionToStarting(solpuz)); //cantClick = map(square index, value)
+  window.solution_colors = generateSolutionColors(solpuz); //solution_colors = array (0 for water, 1 for land, size 81)
 
   // Here is how the puzzle start and puzzle solution state is stored after generateStartingColors and generateSolutionColors:
   //   cantClick: new Map([
