@@ -547,6 +547,34 @@ function growIsland(board, startCellIndex, targetSize) {
     return islandCells;
 }
 
+function growIslandWithRetries(board, startCellIndex, targetSize, attempts = 8) {
+    for (let attempt = 0; attempt < attempts; attempt++) {
+        const island = growIsland(board, startCellIndex, targetSize);
+        if (island !== null) return island;
+    }
+
+    return null;
+}
+
+function getGrowAttemptsForSize(size) {
+    if (size >= 8) return 10;
+    if (size >= 6) return 7;
+    if (size >= 4) return 4;
+    return 2;
+}
+
+function orderIslandSizesForPlacement(sizes) {
+    const large = sizes.filter(size => size >= 6);
+    const medium = sizes.filter(size => size >= 3 && size <= 5);
+    const small = sizes.filter(size => size <= 2);
+
+    return [
+        ...shuffle(large),
+        ...shuffle(medium),
+        ...shuffle(small),
+    ];
+}
+
 // Return a shuffled copy of an array
 function shuffle(items) {
     const shuffled = [...items];  // create copy so we don't mess with the original array
@@ -707,10 +735,171 @@ function repair2x2WaterBlocks(board, islands) {
     }
 }
 
+function getWaterRegions(board) {
+    const visited = new Set();
+    const regions = [];
+
+    for (let cellIndex = 0; cellIndex < SIZE * SIZE; cellIndex++) {
+        if (board[cellIndex] !== "#") continue;
+        if (visited.has(cellIndex)) continue;
+
+        const region = [];
+        const stack = [cellIndex];
+        visited.add(cellIndex);
+
+        while (stack.length > 0) {
+            const current = stack.pop();
+            region.push(current);
+
+            for (const neighborIndex of getNeighborCellIndices(current)) {
+                if (visited.has(neighborIndex)) continue;
+                if (board[neighborIndex] !== "#") continue;
+
+                visited.add(neighborIndex);
+                stack.push(neighborIndex);
+            }
+        }
+
+        regions.push(region);
+    }
+
+    return regions;
+}
+
+function getIslandIndexContainingCell(islands, cellIndex) {
+    for (let i = 0; i < islands.length; i++) {
+        if (islands[i].includes(cellIndex)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+function isConnectedCellGroup(cells) {
+    if (cells.length <= 1) return true;
+
+    const cellSet = new Set(cells);
+    const visited = new Set();
+    const stack = [cells[0]];
+    visited.add(cells[0]);
+
+    while (stack.length > 0) {
+        const current = stack.pop();
+
+        for (const neighborIndex of getNeighborCellIndices(current)) {
+            if (!cellSet.has(neighborIndex)) continue;
+            if (visited.has(neighborIndex)) continue;
+
+            visited.add(neighborIndex);
+            stack.push(neighborIndex);
+        }
+    }
+
+    return visited.size === cells.length;
+}
+
+// Check whether land cell can be removed from its island
+function canRemoveIslandCell(islands, cellIndex) {
+    const islandIndex = getIslandIndexContainingCell(islands, cellIndex);
+    if (islandIndex === -1) return false;
+
+    const island = islands[islandIndex];
+
+    // Do not delete an island completely
+    if (island.length <= 1) return false;
+
+    const remainingCells = island.filter(cell => cell !== cellIndex);
+
+    return isConnectedCellGroup(remainingCells);
+}
+
+// Actually remove land cell chosen from above function
+function removeIslandCell(board, islands, cellIndex) {
+    const islandIndex = getIslandIndexContainingCell(islands, cellIndex);
+    if (islandIndex === -1) return false;
+    if (!canRemoveIslandCell(islands, cellIndex)) return false;
+
+    islands[islandIndex] = islands[islandIndex].filter(cell => cell !== cellIndex);
+    board[cellIndex] = "#";
+
+    return true;
+}
+
+function distanceToNearestWater(startCellIndex, waterSet) {
+    const visited = new Set();
+    const queue = [{ cellIndex: startCellIndex, distance: 0 }];
+    visited.add(startCellIndex);
+
+    while (queue.length > 0) {
+        const { cellIndex, distance } = queue.shift();
+
+        if (waterSet.has(cellIndex)) {
+            return distance;
+        }
+
+        for (const neighborIndex of getNeighborCellIndices(cellIndex)) {
+            if (visited.has(neighborIndex)) continue;
+
+            visited.add(neighborIndex);
+            queue.push({
+                cellIndex: neighborIndex,
+                distance: distance + 1,
+            });
+        }
+    }
+    return Infinity;
+}
+
+function repairDisconnectedWater(board, islands, maxCarves = 20) {
+    let carves = 0;
+
+    while (!isWaterConnected(board)) {
+        if (carves >= maxCarves) return false;
+
+        const waterRegions = getWaterRegions(board);
+        if (waterRegions.length <= 1) return true;
+
+        // Connect smaller regions into the largest one
+        waterRegions.sort((a, b) => b.length - a.length);
+
+        const mainRegion = waterRegions[0];
+        const mainWater = new Set(mainRegion);
+
+        let bestCellToCarve = null;
+        let bestDistance = Infinity;
+
+        // Look at land cells next to smaller water regions.
+        // Prefer one that is close to the main water region.
+        for (let regionIndex = 1; regionIndex < waterRegions.length; regionIndex++) {
+            for (const waterCell of waterRegions[regionIndex]) {
+                for (const neighborIndex of getNeighborCellIndices(waterCell)) {
+                    if (board[neighborIndex] === "#") continue;
+                    if (!canRemoveIslandCell(islands, neighborIndex)) continue;
+
+                    const distance = distanceToNearestWater(neighborIndex, mainWater);
+
+                    if (distance < bestDistance) {
+                        bestDistance = distance;
+                        bestCellToCarve = neighborIndex;
+                    }
+                }
+            }
+        }
+
+        if (bestCellToCarve === null) {
+            return false;
+        }
+
+        removeIslandCell(board, islands, bestCellToCarve);
+        carves++;
+    }
+    return true;
+}
+
 // Try to build one complete solved board candidate
 function buildCandidateSolution() {
     const board = makeEmptyBoard();
-    const islandSizes = chooseIslandSizes().sort((a, b) => b - a);
+    const islandSizes = orderIslandSizesForPlacement(chooseIslandSizes());
     const islands = [];
 
     // Loop through all islands by their size clue number
@@ -722,7 +911,7 @@ function buildCandidateSolution() {
         // Try different starting cells until this island successfully grows
         for (const startCellIndex of possibleStarts) {
             // Try to grow island of desired size from starting water cell
-            const island = growIsland(board, startCellIndex, size);
+            const island = growIslandWithRetries(board, startCellIndex, size, getGrowAttemptsForSize(size));
             // If island couldn't grow from water cell, try another starting water cell
             if (island !== null) {
                 placedIsland = island;
@@ -741,6 +930,10 @@ function buildCandidateSolution() {
 
     // Actively fix 2x2 water instead of hoping validation passes for less attempts hopefully
     if (!repair2x2WaterBlocks(board, islands)) {
+        return null;
+    }
+
+    if (!repairDisconnectedWater(board, islands)) {
         return null;
     }
 
@@ -1135,29 +1328,59 @@ function areShapeObjectsCompatible(shapeA, shapeB) {
     return (shapeA.blockedMask & shapeB.landMask) === 0n;
 }
 
-function countSolutionsByIslands(startingPuzzle, maxSolutions = 2, maxNodes = 50000) {
+function buildClueOptions(startingPuzzle, maxPerClue = Infinity, maxTotal = Infinity) {
     const board = typeof startingPuzzle === "string"
         ? startingPuzzle.split("")
         : [...startingPuzzle];
 
     const clues = getClues(board);
+    const clueOptions = [];
 
-    const clueOptions = clues.map(clue => {
-        const shapes = generateIslandShapesForClue(board, clue.index, clue.value)
-            .map(shape => ({
-                cells: shape,
-                landMask: shapeToMask(shape),
-                blockedMask: shapeTouchMask(shape),
-            }));
+    let totalShapes = 0;
+    let maxShapes = 0;
+    let tooExpensive = false;
 
-        return {
+    for (const clue of clues) {
+        const rawShapes = generateIslandShapesForClue(
+            board,
+            clue.index,
+            clue.value,
+            maxPerClue
+        );
+
+        const shapes = rawShapes.map(shape => ({
+            cells: shape,
+            landMask: shapeToMask(shape),
+            blockedMask: shapeTouchMask(shape),
+        }));
+
+        totalShapes += shapes.length;
+        maxShapes = Math.max(maxShapes, shapes.length);
+
+        clueOptions.push({
             clue,
             shapes,
             allShapeMask: (1n << BigInt(shapes.length)) - 1n,
-        };
-    });
+        });
 
-    // compatibleShapeMasks[a][shapeIndex][b] = bitmask of shapes in b compatible with this shape from a
+        if (shapes.length >= maxPerClue || totalShapes >= maxTotal) {
+            tooExpensive = true;
+            break;
+        }
+    }
+
+    return {
+        board,
+        clueOptions,
+        stats: {
+            total: totalShapes,
+            max: maxShapes,
+            tooExpensive,
+        },
+    };
+}
+
+function countSolutionsFromClueOptions(clueOptions, maxSolutions = 2, maxNodes = 50000) {
     const compatibleShapeMasks = clueOptions.map((optionA, optionAIndex) => {
         return optionA.shapes.map(shapeA => {
             return clueOptions.map((optionB, optionBIndex) => {
@@ -1205,9 +1428,7 @@ function countSolutionsByIslands(startingPuzzle, maxSolutions = 2, maxNodes = 50
 
             const count = countBits(possibleMasks[optionIndex]);
 
-            if (count === 0) {
-                return optionIndex;
-            }
+            if (count === 0) return optionIndex;
 
             if (count < bestCount) {
                 bestCount = count;
@@ -1291,10 +1512,14 @@ function countSolutionsByIslands(startingPuzzle, maxSolutions = 2, maxNodes = 50
     }
 
     const initialPossibleMasks = clueOptions.map(option => option.allShapeMask);
-
     search(0n, initialPossibleMasks, new Set());
 
     return solutions;
+}
+
+function countSolutionsByIslands(startingPuzzle, maxSolutions = 2, maxNodes = 50000) {
+    const { clueOptions } = buildClueOptions(startingPuzzle);
+    return countSolutionsFromClueOptions(clueOptions, maxSolutions, maxNodes);
 }
 
 function generateSolvedPuzzle(maxAttempts = 10000) {
@@ -1345,12 +1570,14 @@ function generateSolvedPuzzle(maxAttempts = 10000) {
         console.log(`Analyzing solution uniqueness for valid puzzle #${puzzNum++}...`);
         //printShapeCounts(startingPuzzle);
 
-        if (!isCheapEnoughToSolve(startingPuzzle)) {
+        const clueData = buildClueOptions(startingPuzzle, 1501, 6001);
+
+        if (clueData.stats.tooExpensive) {
             failReasons.tooExpensive++;
             continue;
         }
 
-        if (countSolutionsByIslands(startingPuzzle, 2, 50000) !== 1) {
+        if (countSolutionsFromClueOptions(clueData.clueOptions, 2, 50000) !== 1) {
             failReasons.notUnique++;
             continue;
         }
@@ -1437,7 +1664,13 @@ function printShapeCounts(puzzle) {
 
 //-------------------------------------------------------------------------------------------------------------
 
-// solpuz = generateSolvedPuzzle(10000000);
+// const startTime = new Date().getTime();
+// for (let i = 0; i < 100; i++) {
+//     solpuz = generateSolvedPuzzle(10000000);
+// }
+// const endTime = new Date().getTime();
+// const avgTimeTaken = (endTime - startTime) / 100;
+// console.log("Generation takes " + avgTimeTaken + " milliseconds on average");
 // puzzle = solutionToStarting(solpuz);
 // console.log(puzzle);
 // console.log(solpuz);
