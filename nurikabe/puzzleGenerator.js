@@ -1404,6 +1404,7 @@ function countSolutionsFromClueOptions(clueOptions, maxSolutions = 2, maxNodes =
     let solutions = 0;
     let nodes = 0;
     const chosen = [];
+    let hitNodeLimit = false;
 
     function getPossibleFutureLandMask(possibleMasks, usedOptions) {
         let mask = 0n;
@@ -1441,7 +1442,10 @@ function countSolutionsFromClueOptions(clueOptions, maxSolutions = 2, maxNodes =
 
     function search(landMask, possibleMasks, usedOptions) {
         nodes++;
-        if (nodes > maxNodes) return;
+        if (nodes > maxNodes) {
+            hitNodeLimit = true;
+            return;
+        }
         if (solutions >= maxSolutions) return;
 
         const possibleFutureLandMask = getPossibleFutureLandMask(possibleMasks, usedOptions);
@@ -1514,7 +1518,11 @@ function countSolutionsFromClueOptions(clueOptions, maxSolutions = 2, maxNodes =
     const initialPossibleMasks = clueOptions.map(option => option.allShapeMask);
     search(0n, initialPossibleMasks, new Set());
 
-    return solutions;
+    return {
+        solutions,
+        complete: !hitNodeLimit,
+        nodes,
+    };
 }
 
 function countSolutionsByIslands(startingPuzzle, maxSolutions = 2, maxNodes = 50000) {
@@ -1529,7 +1537,9 @@ function generateSolvedPuzzle(maxAttempts = 10000) {
         twoByTwoWater: 0,
         disconnectedWater: 0,
         invalidFinished: 0,
+        tooManyOnes: 0,
         tooExpensive: 0,
+        tooHardToCount: 0,
         notUnique: 0,
     };
     let puzzNum = 1;
@@ -1565,6 +1575,12 @@ function generateSolvedPuzzle(maxAttempts = 10000) {
             continue;
         }
 
+        // Make sure board only has 5 or less 1's in it
+        if (board.filter(char => char === "1").length > 5) {
+            failReasons.tooManyOnes++;
+            continue;
+        }
+
         const solutionString = toString(board);
         const startingPuzzle = solutionToStarting(solutionString);
         console.log(`Analyzing solution uniqueness for valid puzzle #${puzzNum++}...`);
@@ -1577,7 +1593,14 @@ function generateSolvedPuzzle(maxAttempts = 10000) {
             continue;
         }
 
-        if (countSolutionsFromClueOptions(clueData.clueOptions, 2, 50000) !== 1) {
+        const solutionResult = countSolutionsFromClueOptions(clueData.clueOptions, 2, 50000);
+
+        if (!solutionResult.complete) {
+            failReasons.tooHardToCount++;
+            continue;
+        }
+
+        if (solutionResult.solutions !== 1) {
             failReasons.notUnique++;
             continue;
         }
@@ -1664,16 +1687,16 @@ function printShapeCounts(puzzle) {
 
 //-------------------------------------------------------------------------------------------------------------
 
-// const startTime = new Date().getTime();
-// for (let i = 0; i < 100; i++) {
-//     solpuz = generateSolvedPuzzle(10000000);
-// }
-// const endTime = new Date().getTime();
-// const avgTimeTaken = (endTime - startTime) / 100;
-// console.log("Generation takes " + avgTimeTaken + " milliseconds on average");
-// puzzle = solutionToStarting(solpuz);
-// console.log(puzzle);
-// console.log(solpuz);
+const startTime = new Date().getTime();
+for (let i = 0; i < 100; i++) {
+    solpuz = generateSolvedPuzzle(10000000);
+}
+const endTime = new Date().getTime();
+const avgTimeTaken = (endTime - startTime) / 100;
+console.log("Generation takes " + avgTimeTaken + " milliseconds on average");
+puzzle = solutionToStarting(solpuz);
+console.log(puzzle);
+console.log(solpuz);
 //printShapeCounts(puzzle);
 
 // console.log(countSolutionsByIslands(puzzle, 2) === 1);
