@@ -1,18 +1,68 @@
-const SIZE = 9;
+function makeConfig(size) {
+    const config = {
+        size,
+        cellCount: size * size,
+        landRange: getLandRange(size),
+        maxIslandSize: getMaxIslandSize(size),
+        maxOneClues: getMaxOneClues(size),
+    };
+    config.water2x2Masks = get2x2Masks(config);
+    return config;
+}
+
+function getLandRange(size) {
+    const known = {
+        7: [16, 26],
+        9: [24, 42],
+        11: [44, 56],
+    };
+
+    if (known[size]) return known[size];
+
+    const cells = size * size;
+    return [
+        Math.round(cells * 0.32),
+        Math.round(cells * 0.50),
+    ];
+}
+
+function getMaxOneClues(size) {
+    const known = {
+        7: 4,
+        9: 5,
+        11: 12,
+    };
+
+    if (known[size]) return known[size];
+
+    return Math.max(4, Math.round(size * 0.75));
+}
 
 // Get string index for certain row and column of tile
-function index(row, col) {
-    return row * SIZE + col;
+function index(config, row, col) {
+    return row * config.size + col;
 }
 
 // Return the value of a tile using row and column
-function getCell(board, row, col) {
-    return board[index(row, col)];
+function getCell(config, board, row, col) {
+    return board[index(config, row, col)];
 }
 
 // Turn 1-D array back into string to feed into rest of program
 function toString(board) {
     return board.join("");
+}
+
+function getMaxIslandSize(size) {
+    const known = {
+        7: 9,
+        9: 9,
+        11: 13,
+    };
+
+    if (known[size]) return known[size];
+
+    return Math.max(9, Math.round(size * 1.2));
 }
 
 // Turn puzzle solution string into puzzle starting string
@@ -28,12 +78,12 @@ function solutionToStarting(solpuz) {
 }
 
 // Make sure input row and column is within the bounds of the board
-function inBounds(row, col) {
-    return row >= 0 && row < SIZE && col >= 0 && col < SIZE;
+function inBounds(config, row, col) {
+    return row >= 0 && row < config.size && col >= 0 && col < config.size;
 }
 
 // Get each neighbor of a tile
-function getNeighbors(row, col) {
+function getNeighbors(config, row, col) {
     const neighbors = [
         [row - 1, col],
         [row + 1, col],
@@ -41,24 +91,24 @@ function getNeighbors(row, col) {
         [row, col + 1],
     ];
 
-    return neighbors.filter(([r, c]) => inBounds(r, c));
+    return neighbors.filter(([r, c]) => inBounds(config, r, c));
 }
 
 // Get string indices of a cell's neighbors
-function getNeighborIndices(row, col) {
-    return getNeighbors(row, col).map(([r, c]) => index(r, c));
+function getNeighborIndices(config, row, col) {
+    return getNeighbors(config, row, col).map(([r, c]) => index(config, r, c));
 }
 
 // Check if there are any 2x2 areas of water on the board
-function has2x2Water(board) {
+function has2x2Water(config, board) {
     // loop through every cell except right column and bottom row
-    for (let row = 0; row < SIZE - 1; row++) {
-        for (let col = 0; col < SIZE - 1; col++) {
+    for (let row = 0; row < config.size - 1; row++) {
+        for (let col = 0; col < config.size - 1; col++) {
             if (
-                getCell(board, row, col) === "#" &&  // check if current cell is water
-                getCell(board, row, col + 1) === "#" &&  // check if cell to the right of current cell is water
-                getCell(board, row + 1, col) === "#" &&  // check if cell below the current cell is water
-                getCell(board, row + 1, col + 1) === "#"  // check if cell diagonally down-right of current cell is water
+                getCell(config, board, row, col) === "#" &&  // check if current cell is water
+                getCell(config, board, row, col + 1) === "#" &&  // check if cell to the right of current cell is water
+                getCell(config, board, row + 1, col) === "#" &&  // check if cell below the current cell is water
+                getCell(config, board, row + 1, col + 1) === "#"  // check if cell diagonally down-right of current cell is water
             ) {
                 return true;
             }
@@ -69,14 +119,14 @@ function has2x2Water(board) {
 }
 
 // Check if all the water on the board is connected
-function isWaterConnected(board) {
+function isWaterConnected(config, board) {
     let firstWater = null;
     let totalWater = 0;  // will hold count of water tiles
 
     // Count every water tile on the board
-    for (let row = 0; row < SIZE; row++) {
-        for (let col = 0; col < SIZE; col++) {
-            if (getCell(board, row, col) === "#") {
+    for (let row = 0; row < config.size; row++) {
+        for (let col = 0; col < config.size; col++) {
+            if (getCell(config, board, row, col) === "#") {
                 totalWater++;
                 if (firstWater === null) {
                     firstWater = [row, col];
@@ -91,12 +141,12 @@ function isWaterConnected(board) {
     }
 
     // Flood fill water from first water 
-    const connectedWater = floodFillWater(board, firstWater[0], firstWater[1]);
+    const connectedWater = floodFillWater(config, board, firstWater[0], firstWater[1]);
     return connectedWater.length === totalWater;
 }
 
 // Helper used in water connected check
-function floodFillWater(board, firstWaterRow, firstWaterCol) {
+function floodFillWater(config, board, firstWaterRow, firstWaterCol) {
     const stack = [[firstWaterRow, firstWaterCol]];  // stack containing first water position to keep track of cells we still need to explore
     const visited = new Set();  // set to remember cells that have already been processed
     const waterCells = [];  // array to store all water cells found by flood fill
@@ -106,12 +156,12 @@ function floodFillWater(board, firstWaterRow, firstWaterCol) {
         // Pop a cell off the stack to be examined
         const [row, col] = stack.pop();
         // Get index of current cell so it can be stored in the "visited" set
-        const key = index(row, col);
+        const key = index(config, row, col);
 
         // If this cell has already been processed, skip it and move on
         if (visited.has(key)) continue;
         // If current cell is not water, skip it and move on
-        if (getCell(board, row, col) !== "#") continue;
+        if (getCell(config, board, row, col) !== "#") continue;
 
         // Mark current water cell as visited
         visited.add(key);
@@ -119,9 +169,9 @@ function floodFillWater(board, firstWaterRow, firstWaterCol) {
         waterCells.push([row, col]);
 
         // Get all neighbors of current cell
-        for (const [neighRow, neighCol] of getNeighbors(row, col)) {
+        for (const [neighRow, neighCol] of getNeighbors(config, row, col)) {
             // Check whether neighbor is water
-            if (getCell(board, neighRow, neighCol) === "#") {
+            if (getCell(config, board, neighRow, neighCol) === "#") {
                 // Push water neighbor to stack to be explored
                 stack.push([neighRow, neighCol]);
             }
@@ -136,56 +186,56 @@ function isLand(cell) {
     return cell === " " || isClue(cell);  // ' ' or a number clue can be land
 }
 
-function getLandRegions(board) {
-    const visited = new Set();
-    const islands = [];
-
-    for (let row = 0; row < SIZE; row++) {
-        for (let col = 0; col < SIZE; col++) {
-            const key = index(row, col);
-
-            if (visited.has(key)) continue;
-            if (!isLand(getCell(board, row, col))) continue;
-
-            // Get arrays of [row, col] cells making up an island
-            const island = floodFillLand(board, row, col);
-            islands.push(island);
-
-            // Add all tiles of found island to visited set
-            for (const [r, c] of island) {
-                visited.add(index(r, c));
-            }
-        }
-    }
-
-    return islands;
-}
-
 // Same as water fill, but for land instead of water
 // Finds indices of a single island
-function floodFillLand(board, startRow, startCol) {
+function floodFillLand(config, board, startRow, startCol) {
     const stack = [[startRow, startCol]];
     const visited = new Set();
     const landCells = [];
 
     while (stack.length > 0) {
         const [row, col] = stack.pop();
-        const key = index(row, col);
+        const key = index(config, row, col);
 
         if (visited.has(key)) continue;
-        if (!isLand(getCell(board, row, col))) continue;
+        if (!isLand(getCell(config, board, row, col))) continue;
 
         visited.add(key);
         landCells.push([row, col]);
 
-        for (const [neighRow, neighCol] of getNeighbors(row, col)) {
-            if (isLand(getCell(board, neighRow, neighCol))) {
+        for (const [neighRow, neighCol] of getNeighbors(config, row, col)) {
+            if (isLand(getCell(config, board, neighRow, neighCol))) {
                 stack.push([neighRow, neighCol]);
             }
         }
     }
 
     return landCells;
+}
+
+function getLandRegions(config, board) {
+    const visited = new Set();
+    const islands = [];
+
+    for (let row = 0; row < config.size; row++) {
+        for (let col = 0; col < config.size; col++) {
+            const key = index(config, row, col);
+
+            if (visited.has(key)) continue;
+            if (!isLand(getCell(config, board, row, col))) continue;
+
+            // Get arrays of [row, col] cells making up an island
+            const island = floodFillLand(config, board, row, col);
+            islands.push(island);
+
+            // Add all tiles of found island to visited set
+            for (const [r, c] of island) {
+                visited.add(index(config, r, c));
+            }
+        }
+    }
+
+    return islands;
 }
 
 function isClue(cell) {
@@ -198,10 +248,10 @@ function clueToNumber(cell) {
 }
 
 // Finds number of clue squares in island to make sure there is only 1
-function countCluesInIsland(board, island) {
+function countCluesInIsland(config, board, island) {
     let count = 0;
     for (const [row, col] of island) {
-        if (isClue(getCell(board, row, col))) {
+        if (isClue(getCell(config, board, row, col))) {
             count++;
         }
     }
@@ -209,10 +259,10 @@ function countCluesInIsland(board, island) {
 }
 
 // Get the clue number value from the island's clue
-function getClueValueInIsland(board, island) {
+function getClueValueInIsland(config, board, island) {
     // Check every cell in island for one with a value
     for (const [row, col] of island) {
-        const cell = getCell(board, row, col);
+        const cell = getCell(config, board, row, col);
         const value = clueToNumber(cell);
         if (value !== null) {
             return value;
@@ -221,29 +271,21 @@ function getClueValueInIsland(board, island) {
     return null;
 }
 
-function islandToIndexSet(region) {
-    const cells = new Set();
-    for (const [row, col] of region) {
-        cells.add(index(row, col));
-    }
-    return cells;
+function rowOf(config, cellIndex) {
+    return Math.floor(cellIndex / config.size);
 }
 
-function rowOf(cellIndex) {
-    return Math.floor(cellIndex / SIZE);
+function colOf(config, cellIndex) {
+    return cellIndex % config.size;
 }
 
-function colOf(cellIndex) {
-    return cellIndex % SIZE;
-}
-
-function getNeighborCellIndices(cellIndex) {
-    return getNeighborIndices(rowOf(cellIndex), colOf(cellIndex));
+function getNeighborCellIndices(config, cellIndex) {
+    return getNeighborIndices(config, rowOf(config, cellIndex), colOf(config, cellIndex));
 }
 
 // Make sure board is correct size and does not contain invalid characters
-function isValidBoardShape(board) {
-    if (board.length !== SIZE * SIZE) return false;  // Ensure board size is correct
+function isValidBoardShape(config, board) {
+    if (board.length !== config.size * config.size) return false;  // Ensure board size is correct
 
     // Ensure board only contains valid characters
     for (const cell of board) {
@@ -256,29 +298,29 @@ function isValidBoardShape(board) {
 }
 
 // Validator to check if a finished board is a valid nurikabe puzzle
-function isValidFinishedBoard(board) {
-    if (!isValidBoardShape(board)) return false;  // make sure board size and characters are valid
-    if (has2x2Water(board)) return false;  // make sure there are no 2x2 pockets of water
-    if (!isWaterConnected(board)) return false;  // make sure all the water is connected
+function isValidFinishedBoard(config, board) {
+    if (!isValidBoardShape(config, board)) return false;  // make sure board size and characters are valid
+    if (has2x2Water(config, board)) return false;  // make sure there are no 2x2 pockets of water
+    if (!isWaterConnected(config, board)) return false;  // make sure all the water is connected
 
-    const islands = getLandRegions(board);  // gather the groups of indices for each island on the board
+    const islands = getLandRegions(config,  board);  // gather the groups of indices for each island on the board
 
     for (const island of islands) {
         // Make sure each island has just 1 clue square
-        const clueCount = countCluesInIsland(board, island);
+        const clueCount = countCluesInIsland(config, board, island);
         if (clueCount !== 1) return false;
 
         // Make sure the clue value is the correct number for the island size
-        const clueValue = getClueValueInIsland(board, island);
+        const clueValue = getClueValueInIsland(config, board, island);
         if (island.length !== clueValue) return false;
     }
 
     return true;  // yay we have a valid board woohoo
 }
 
-// Make array of SIZE * SIZE single character strings full of '#'
-function makeEmptyBoard() {
-    return Array(SIZE * SIZE).fill("#");
+// Make array of config.size * config.size single character strings full of '#'
+function makeEmptyBoard(config) {
+    return Array(config.size * config.size).fill("#");
 }
 
 // Place island at certain indices of puzzle string
@@ -289,12 +331,12 @@ function placeIslandWithClue(board, cells, clueIndex, clueValue) {
     board[clueIndex] = clueValue.toString(16).toUpperCase();
 }
 
-function chooseBestCluePositions(islands) {
+function chooseBestCluePositions(config, islands) {
     let cluePositions = islands.map(island => island[0]);
 
     // Do a few passes because clue choices affect each other
     for (let pass = 0; pass < 1; pass++) {
-        const clueBoard = Array(SIZE * SIZE).fill(".");
+        const clueBoard = Array(config.size * config.size).fill(".");
 
         for (let i = 0; i < islands.length; i++) {
             clueBoard[cluePositions[i]] = islands[i].length.toString(16).toUpperCase();
@@ -317,6 +359,7 @@ function chooseBestCluePositions(islands) {
                 testBoard[candidateCell] = island.length.toString(16).toUpperCase();
 
                 const shapeCount = generateIslandShapesForClue(
+                    config, 
                     testBoard,
                     candidateCell,
                     island.length,
@@ -337,15 +380,15 @@ function chooseBestCluePositions(islands) {
 }
 
 // Check if land (island) square can be placed at given index
-function canPlaceIslandCell(board, islandCells, cellIndex) {
+function canPlaceIslandCell(config, board, islandCells, cellIndex) {
     // Make sure the cell exists on the board
-    if (cellIndex < 0 || cellIndex >= SIZE * SIZE) return false;
+    if (cellIndex < 0 || cellIndex >= config.size * config.size) return false;
 
     // Can only grow an island into water
     if (board[cellIndex] !== "#") return false;
 
     const islandSet = new Set(islandCells);
-    const neighbors = getNeighborCellIndices(cellIndex);
+    const neighbors = getNeighborCellIndices(config, cellIndex);
 
     // If this island already has cells, the new cell must touch it
     if (islandCells.length > 0) {
@@ -376,13 +419,13 @@ function canPlaceIslandCell(board, islandCells, cellIndex) {
 }
 
 // Get all neighboring water cells this island is allowed to grow into
-function getIslandGrowthCandidates(board, islandCells) {
+function getIslandGrowthCandidates(config, board, islandCells) {
     const candidates = new Set();
 
     // If the island has no cells yet, any valid water cell could be its start
     if (islandCells.length === 0) {
-        for (let cellIndex = 0; cellIndex < SIZE * SIZE; cellIndex++) {
-            if (canPlaceIslandCell(board, islandCells, cellIndex)) {
+        for (let cellIndex = 0; cellIndex < config.size * config.size; cellIndex++) {
+            if (canPlaceIslandCell(config, board, islandCells, cellIndex)) {
                 candidates.add(cellIndex);
             }
         }
@@ -392,8 +435,8 @@ function getIslandGrowthCandidates(board, islandCells) {
 
     // If the island already exists, gather all valid neighboring water cells of island as growth candidates
     for (const cellIndex of islandCells) {
-        for (const neighborIndex of getNeighborCellIndices(cellIndex)) {
-            if (canPlaceIslandCell(board, islandCells, neighborIndex)) {
+        for (const neighborIndex of getNeighborCellIndices(config, cellIndex)) {
+            if (canPlaceIslandCell(config, board, islandCells, neighborIndex)) {
                 candidates.add(neighborIndex);
             }
         }
@@ -409,11 +452,11 @@ function randomChoice(items) {
 }
 
 // Create one island of given size
-function growIsland(board, startCellIndex, targetSize) {
+function growIsland(config, board, startCellIndex, targetSize) {
     const islandCells = [];
 
     // Make sure first cell can be placed
-    if (!canPlaceIslandCell(board, islandCells, startCellIndex)) {
+    if (!canPlaceIslandCell(config, board, islandCells, startCellIndex)) {
         return null;
     }
 
@@ -424,7 +467,7 @@ function growIsland(board, startCellIndex, targetSize) {
     // Repeatedly add growth candidates until target island size is reached
     while (islandCells.length < targetSize) {
         // Get island's current growth candidates (valid water neighbors)
-        const candidates = getIslandGrowthCandidates(board, islandCells);
+        const candidates = getIslandGrowthCandidates(config, board, islandCells);
 
         // If there is nowhere to grow, the island generation fails and each cell is set back to water
         if (candidates.length === 0) {
@@ -445,9 +488,9 @@ function growIsland(board, startCellIndex, targetSize) {
     return islandCells;
 }
 
-function growIslandWithRetries(board, startCellIndex, targetSize, attempts = 8) {
+function growIslandWithRetries(config, board, startCellIndex, targetSize, attempts = 8) {
     for (let attempt = 0; attempt < attempts; attempt++) {
-        const island = growIsland(board, startCellIndex, targetSize);
+        const island = growIsland(config, board, startCellIndex, targetSize);
         if (island !== null) return island;
     }
 
@@ -488,9 +531,9 @@ function shuffle(items) {
 }
 
 // Get the indices of every water cell on the board
-function getAllWaterCellIndices(board) {
+function getAllWaterCellIndices(config, board) {
     const waterCells = [];
-    for (let cellIndex = 0; cellIndex < SIZE * SIZE; cellIndex++) {
+    for (let cellIndex = 0; cellIndex < config.size * config.size; cellIndex++) {
         if (board[cellIndex] === "#") {
             waterCells.push(cellIndex);
         }
@@ -518,16 +561,17 @@ function randomBellCurveInt(min, max) {
 }
 
 // Pick island sizes for one candidate puzzle
-function chooseIslandSizes() {
+function chooseIslandSizes(config) {
     const sizes = [];
-    const targetLand = randomBellCurveInt(24, 42); // 24 to 42 land cells
+    const [minLand, maxLand] = config.landRange;
+    const targetLand = randomBellCurveInt(minLand, maxLand);
     let totalLand = 0;
 
     while (totalLand < targetLand) {
         const remaining = targetLand - totalLand;  // remaining number of land squares to fill on the board
-        const maxSize = Math.min(9, remaining);  // max size of island is either number listed here or 'remaining', whichever is smaller
+        const maxSize = Math.min(config.maxIslandSize, remaining);  // max size of island is either number listed here or 'remaining', whichever is smaller
+        
         let size;
-
         // Most islands are small/medium, sometimes can be large
         if (Math.random() < 0.75 || maxSize < 6) {
             size = randomBellCurveInt(1, Math.min(5, maxSize));
@@ -543,14 +587,14 @@ function chooseIslandSizes() {
 }
 
 // Return the 4 cell indices of the first 2x2 water block found
-function findFirst2x2WaterBlock(board) {
-    for (let row = 0; row < SIZE - 1; row++) {
-        for (let col = 0; col < SIZE - 1; col++) {
+function findFirst2x2WaterBlock(config, board) {
+    for (let row = 0; row < config.size - 1; row++) {
+        for (let col = 0; col < config.size - 1; col++) {
             const cells = [
-                index(row, col),
-                index(row, col + 1),
-                index(row + 1, col),
-                index(row + 1, col + 1),
+                index(config, row, col),
+                index(config, row, col + 1),
+                index(config, row + 1, col),
+                index(config, row + 1, col + 1),
             ];
 
             if (cells.every(cellIndex => board[cellIndex] === "#")) {
@@ -562,9 +606,9 @@ function findFirst2x2WaterBlock(board) {
 }
 
 // Add size-1 islands until there are no 2x2 water blocks
-function repair2x2WaterBlocks(board, islands) {
+function repair2x2WaterBlocks(config, board, islands) {
     while (true) {
-        const waterBlock = findFirst2x2WaterBlock(board);
+        const waterBlock = findFirst2x2WaterBlock(config, board);
 
         // No 2x2 water left --> repair succeeded
         if (waterBlock === null) {
@@ -575,7 +619,7 @@ function repair2x2WaterBlocks(board, islands) {
 
         // Try placing a 1-cell island in one of the cells of this 2x2 water block
         for (const cellIndex of shuffle(waterBlock)) {
-            if (canPlaceIslandCell(board, [], cellIndex)) {
+            if (canPlaceIslandCell(config, board, [], cellIndex)) {
                 board[cellIndex] = " ";  // change cell to land
                 islands.push([cellIndex]);  // add new land cell as island
                 repaired = true;  // this water block is repaired yay
@@ -590,11 +634,11 @@ function repair2x2WaterBlocks(board, islands) {
     }
 }
 
-function getWaterRegions(board) {
+function getWaterRegions(config, board) {
     const visited = new Set();
     const regions = [];
 
-    for (let cellIndex = 0; cellIndex < SIZE * SIZE; cellIndex++) {
+    for (let cellIndex = 0; cellIndex < config.size * config.size; cellIndex++) {
         if (board[cellIndex] !== "#") continue;
         if (visited.has(cellIndex)) continue;
 
@@ -606,7 +650,7 @@ function getWaterRegions(board) {
             const current = stack.pop();
             region.push(current);
 
-            for (const neighborIndex of getNeighborCellIndices(current)) {
+            for (const neighborIndex of getNeighborCellIndices(config, current)) {
                 if (visited.has(neighborIndex)) continue;
                 if (board[neighborIndex] !== "#") continue;
 
@@ -630,7 +674,7 @@ function getIslandIndexContainingCell(islands, cellIndex) {
     return -1;
 }
 
-function isConnectedCellGroup(cells) {
+function isConnectedCellGroup(config, cells) {
     if (cells.length <= 1) return true;
 
     const cellSet = new Set(cells);
@@ -641,7 +685,7 @@ function isConnectedCellGroup(cells) {
     while (stack.length > 0) {
         const current = stack.pop();
 
-        for (const neighborIndex of getNeighborCellIndices(current)) {
+        for (const neighborIndex of getNeighborCellIndices(config, current)) {
             if (!cellSet.has(neighborIndex)) continue;
             if (visited.has(neighborIndex)) continue;
 
@@ -654,7 +698,7 @@ function isConnectedCellGroup(cells) {
 }
 
 // Check whether land cell can be removed from its island
-function canRemoveIslandCell(islands, cellIndex) {
+function canRemoveIslandCell(config, islands, cellIndex) {
     const islandIndex = getIslandIndexContainingCell(islands, cellIndex);
     if (islandIndex === -1) return false;
 
@@ -665,14 +709,14 @@ function canRemoveIslandCell(islands, cellIndex) {
 
     const remainingCells = island.filter(cell => cell !== cellIndex);
 
-    return isConnectedCellGroup(remainingCells);
+    return isConnectedCellGroup(config, remainingCells);
 }
 
 // Actually remove land cell chosen from above function
-function removeIslandCell(board, islands, cellIndex) {
+function removeIslandCell(config, board, islands, cellIndex) {
     const islandIndex = getIslandIndexContainingCell(islands, cellIndex);
     if (islandIndex === -1) return false;
-    if (!canRemoveIslandCell(islands, cellIndex)) return false;
+    if (!canRemoveIslandCell(config, islands, cellIndex)) return false;
 
     islands[islandIndex] = islands[islandIndex].filter(cell => cell !== cellIndex);
     board[cellIndex] = "#";
@@ -680,7 +724,7 @@ function removeIslandCell(board, islands, cellIndex) {
     return true;
 }
 
-function distanceToNearestWater(startCellIndex, waterSet) {
+function distanceToNearestWater(config, startCellIndex, waterSet) {
     const visited = new Set();
     const queue = [{ cellIndex: startCellIndex, distance: 0 }];
     visited.add(startCellIndex);
@@ -692,7 +736,7 @@ function distanceToNearestWater(startCellIndex, waterSet) {
             return distance;
         }
 
-        for (const neighborIndex of getNeighborCellIndices(cellIndex)) {
+        for (const neighborIndex of getNeighborCellIndices(config, cellIndex)) {
             if (visited.has(neighborIndex)) continue;
 
             visited.add(neighborIndex);
@@ -705,13 +749,13 @@ function distanceToNearestWater(startCellIndex, waterSet) {
     return Infinity;
 }
 
-function repairDisconnectedWater(board, islands, maxCarves = 20) {
+function repairDisconnectedWater(config, board, islands, maxCarves = 20) {
     let carves = 0;
 
-    while (!isWaterConnected(board)) {
+    while (!isWaterConnected(config, board)) {
         if (carves >= maxCarves) return false;
 
-        const waterRegions = getWaterRegions(board);
+        const waterRegions = getWaterRegions(config, board);
         if (waterRegions.length <= 1) return true;
 
         // Connect smaller regions into the largest one
@@ -727,11 +771,11 @@ function repairDisconnectedWater(board, islands, maxCarves = 20) {
         // Prefer one that is close to the main water region.
         for (let regionIndex = 1; regionIndex < waterRegions.length; regionIndex++) {
             for (const waterCell of waterRegions[regionIndex]) {
-                for (const neighborIndex of getNeighborCellIndices(waterCell)) {
+                for (const neighborIndex of getNeighborCellIndices(config, waterCell)) {
                     if (board[neighborIndex] === "#") continue;
-                    if (!canRemoveIslandCell(islands, neighborIndex)) continue;
+                    if (!canRemoveIslandCell(config, islands, neighborIndex)) continue;
 
-                    const distance = distanceToNearestWater(neighborIndex, mainWater);
+                    const distance = distanceToNearestWater(config, neighborIndex, mainWater);
 
                     if (distance < bestDistance) {
                         bestDistance = distance;
@@ -745,28 +789,28 @@ function repairDisconnectedWater(board, islands, maxCarves = 20) {
             return false;
         }
 
-        removeIslandCell(board, islands, bestCellToCarve);
+        removeIslandCell(config, board, islands, bestCellToCarve);
         carves++;
     }
     return true;
 }
 
 // Try to build one complete solved board candidate
-function buildCandidateSolution() {
-    const board = makeEmptyBoard();
-    const islandSizes = orderIslandSizesForPlacement(chooseIslandSizes());
+function buildCandidateSolution(config) {
+    const board = makeEmptyBoard(config);
+    const islandSizes = orderIslandSizesForPlacement(chooseIslandSizes(config));
     const islands = [];
 
     // Loop through all islands by their size clue number
     for (const size of islandSizes) {
         // Choose random water tile to start building from
-        const possibleStarts = shuffle(getAllWaterCellIndices(board));
+        const possibleStarts = shuffle(getAllWaterCellIndices(config, board));
         let placedIsland = null;
 
         // Try different starting cells until this island successfully grows
         for (const startCellIndex of possibleStarts) {
             // Try to grow island of desired size from starting water cell
-            const island = growIslandWithRetries(board, startCellIndex, size, getGrowAttemptsForSize(size));
+            const island = growIslandWithRetries(config, board, startCellIndex, size, getGrowAttemptsForSize(size));
             // If island couldn't grow from water cell, try another starting water cell
             if (island !== null) {
                 placedIsland = island;
@@ -784,19 +828,13 @@ function buildCandidateSolution() {
     }
 
     // Actively fix 2x2 water instead of hoping validation passes for less attempts hopefully
-    if (!repair2x2WaterBlocks(board, islands)) {
+    if (!repair2x2WaterBlocks(config, board, islands)) {
         return null;
     }
 
-    if (!repairDisconnectedWater(board, islands)) {
+    if (!repairDisconnectedWater(config, board, islands)) {
         return null;
     }
-
-    // Turn one cell in each island into its clue number (chooses the tile leading to the least number of shape options for the island when searching for solutions)
-    // const cluePositions = chooseBestCluePositions(islands);
-    // for (let i = 0; i < islands.length; i++) {
-    //     placeIslandWithClue(board, islands[i], cluePositions[i], islands[i].length);
-    // }
 
     return { board, islands };
 }
@@ -818,8 +856,8 @@ function getClues(board) {
     return clues;
 }
 
-function cellTouchesOtherClue(board, cellIndex, ownClueIndex) {
-    for (const neighborIndex of getNeighborCellIndices(cellIndex)) {
+function cellTouchesOtherClue(config, board, cellIndex, ownClueIndex) {
+    for (const neighborIndex of getNeighborCellIndices(config, cellIndex)) {
         if (neighborIndex === ownClueIndex) continue;
         if (isClue(board[neighborIndex])) return true;
     }
@@ -827,7 +865,7 @@ function cellTouchesOtherClue(board, cellIndex, ownClueIndex) {
     return false;
 }
 
-function generateIslandShapesForClue(board, clueIndex, targetSize, maxResults = Infinity) {
+function generateIslandShapesForClue(config, board, clueIndex, targetSize, maxResults = Infinity) {
     const results = [];
     const seen = new Set();
 
@@ -850,13 +888,13 @@ function generateIslandShapesForClue(board, clueIndex, targetSize, maxResults = 
         const candidates = new Set();
 
         for (const cellIndex of cells) {
-            for (const neighborIndex of getNeighborCellIndices(cellIndex)) {
+            for (const neighborIndex of getNeighborCellIndices(config, cellIndex)) {
                 if (cells.has(neighborIndex)) continue;
 
                 const cell = board[neighborIndex];
 
                 if (isClue(cell) && neighborIndex !== clueIndex) continue;
-                if (cellTouchesOtherClue(board, neighborIndex, clueIndex)) continue;
+                if (cellTouchesOtherClue(config, board, neighborIndex, clueIndex)) continue;
 
                 candidates.add(neighborIndex);
             }
@@ -886,13 +924,13 @@ function shapeToMask(shape) {
     return mask;
 }
 
-function shapeTouchMask(shape) {
+function shapeTouchMask(config, shape) {
     let mask = 0n;
 
     for (const cellIndex of shape) {
         mask |= 1n << BigInt(cellIndex);
 
-        for (const neighborIndex of getNeighborCellIndices(cellIndex)) {
+        for (const neighborIndex of getNeighborCellIndices(config, cellIndex)) {
             mask |= 1n << BigInt(neighborIndex);
         }
     }
@@ -900,36 +938,28 @@ function shapeTouchMask(shape) {
     return mask;
 }
 
-function get2x2Masks() {
+function get2x2Masks(config) {
     const masks = [];
-
-    for (let row = 0; row < SIZE - 1; row++) {
-        for (let col = 0; col < SIZE - 1; col++) {
+    for (let row = 0; row < config.size - 1; row++) {
+        for (let col = 0; col < config.size - 1; col++) {
             let mask = 0n;
 
-            mask |= 1n << BigInt(index(row, col));
-            mask |= 1n << BigInt(index(row, col + 1));
-            mask |= 1n << BigInt(index(row + 1, col));
-            mask |= 1n << BigInt(index(row + 1, col + 1));
+            mask |= 1n << BigInt(index(config, row, col));
+            mask |= 1n << BigInt(index(config, row, col + 1));
+            mask |= 1n << BigInt(index(config, row + 1, col));
+            mask |= 1n << BigInt(index(config, row + 1, col + 1));
 
             masks.push(mask);
         }
     }
-
     return masks;
 }
 
-const WATER_2X2_MASKS = get2x2Masks();
-
-function hasForced2x2Water(landMask, possibleFutureLandMask) {
+function hasForced2x2Water(config, landMask, possibleFutureLandMask) {
     const maybeLandMask = landMask | possibleFutureLandMask;
-
-    for (const blockMask of WATER_2X2_MASKS) {
-        if ((maybeLandMask & blockMask) === 0n) {
-            return true;
-        }
+    for (const blockMask of config.water2x2Masks) {
+        if ((maybeLandMask & blockMask) === 0n) return true;
     }
-
     return false;
 }
 
@@ -968,7 +998,7 @@ function areShapeObjectsCompatible(shapeA, shapeB) {
     return (shapeA.blockedMask & shapeB.landMask) === 0n;
 }
 
-function buildClueOptions(startingPuzzle, maxPerClue = Infinity, maxTotal = Infinity) {
+function buildClueOptions(config, startingPuzzle, maxPerClue = Infinity, maxTotal = Infinity) {
     const board = typeof startingPuzzle === "string"
         ? startingPuzzle.split("")
         : [...startingPuzzle];
@@ -982,6 +1012,7 @@ function buildClueOptions(startingPuzzle, maxPerClue = Infinity, maxTotal = Infi
 
     for (const clue of clues) {
         const rawShapes = generateIslandShapesForClue(
+            config, 
             board,
             clue.index,
             clue.value,
@@ -991,7 +1022,7 @@ function buildClueOptions(startingPuzzle, maxPerClue = Infinity, maxTotal = Infi
         const shapes = rawShapes.map(shape => ({
             cells: shape,
             landMask: shapeToMask(shape),
-            blockedMask: shapeTouchMask(shape),
+            blockedMask: shapeTouchMask(config, shape),
         }));
 
         totalShapes += shapes.length;
@@ -1020,7 +1051,7 @@ function buildClueOptions(startingPuzzle, maxPerClue = Infinity, maxTotal = Infi
     };
 }
 
-function countSolutionsFromClueOptions(clueOptions, maxSolutions = 2, maxNodes = 50000) {
+function countSolutionsFromClueOptions(config, clueOptions, maxSolutions = 2, maxNodes = 50000) {
     const compatibleShapeMasks = clueOptions.map((optionA, optionAIndex) => {
         return optionA.shapes.map(shapeA => {
             return clueOptions.map((optionB, optionBIndex) => {
@@ -1089,10 +1120,10 @@ function countSolutionsFromClueOptions(clueOptions, maxSolutions = 2, maxNodes =
         if (solutions >= maxSolutions) return;
 
         const possibleFutureLandMask = getPossibleFutureLandMask(possibleMasks, usedOptions);
-        if (hasForced2x2Water(landMask, possibleFutureLandMask)) return;
+        if (hasForced2x2Water(config, landMask, possibleFutureLandMask)) return;
 
         if (usedOptions.size === clueOptions.length) {
-            const finished = Array(SIZE * SIZE).fill("#");
+            const finished = Array(config.size * config.size).fill("#");
 
             for (const { optionIndex, shapeIndex } of chosen) {
                 const clue = clueOptions[optionIndex].clue;
@@ -1105,7 +1136,7 @@ function countSolutionsFromClueOptions(clueOptions, maxSolutions = 2, maxNodes =
                 finished[clue.index] = clue.cell;
             }
 
-            if (isValidFinishedBoard(finished)) {
+            if (isValidFinishedBoard(config, finished)) {
                 solutions++;
             }
 
@@ -1165,12 +1196,28 @@ function countSolutionsFromClueOptions(clueOptions, maxSolutions = 2, maxNodes =
     };
 }
 
-function countSolutionsByIslands(startingPuzzle, maxSolutions = 2, maxNodes = 50000) {
-    const { clueOptions } = buildClueOptions(startingPuzzle);
-    return countSolutionsFromClueOptions(clueOptions, maxSolutions, maxNodes);
+function countSolutionsByIslands(config, startingPuzzle, maxSolutions = 2, maxNodes = 50000) {
+    const { clueOptions } = buildClueOptions(config, startingPuzzle);
+    return countSolutionsFromClueOptions(config, clueOptions, maxSolutions, maxNodes);
 }
 
-function generateSolvedPuzzle(maxAttempts = 10000) {
+function printShapeCounts(config, puzzle) {
+    const board = puzzle.split("");
+    const clues = getClues(board);
+
+    const counts = clues.map(clue => ({
+        clue: clue.cell,
+        index: clue.index,
+        shapes: generateIslandShapesForClue(config, board, clue.index, clue.value).length,
+    }));
+
+    counts.sort((a, b) => b.shapes - a.shapes);
+    console.log(counts);
+}
+
+function generateSolvedPuzzle(size = 9, maxAttempts = 10000) {
+    const config = makeConfig(size);
+
     // Add fail counters for testing purposes
     const failReasons = {
         nullBoard: 0,
@@ -1185,7 +1232,7 @@ function generateSolvedPuzzle(maxAttempts = 10000) {
     let puzzNum = 1;
     
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        const candidate = buildCandidateSolution();
+        const candidate = buildCandidateSolution(config);
         if (attempt % 10000 === 0) console.log(`Attempt: ${attempt}`);
 
         if (candidate === null) {
@@ -1193,30 +1240,30 @@ function generateSolvedPuzzle(maxAttempts = 10000) {
             continue;
         }
 
-        if (has2x2Water(candidate.board)) {
+        if (has2x2Water(config, candidate.board)) {
             failReasons.twoByTwoWater++;
             continue;
         }
 
-        if (!isWaterConnected(candidate.board)) {
+        if (!isWaterConnected(config, candidate.board)) {
             failReasons.disconnectedWater++;
             continue;
         }
 
         const board = [...candidate.board];
-        const cluePositions = chooseBestCluePositions(candidate.islands);
+        const cluePositions = chooseBestCluePositions(config, candidate.islands);
 
         for (let i = 0; i < candidate.islands.length; i++) {
             placeIslandWithClue(board, candidate.islands[i], cluePositions[i], candidate.islands[i].length);
         }
 
-        if (!isValidFinishedBoard(board)) {
+        if (!isValidFinishedBoard(config, board)) {
             failReasons.invalidFinished++;
             continue;
         }
 
-        // Make sure board only has 5 or less 1's in it
-        if (board.filter(char => char === "1").length > 5) {
+        // Limit how many size-1 islands appear as clues
+        if (board.filter(char => char === "1").length > config.maxOneClues) {
             failReasons.tooManyOnes++;
             continue;
         }
@@ -1226,14 +1273,14 @@ function generateSolvedPuzzle(maxAttempts = 10000) {
         console.log(`Analyzing solution uniqueness for valid puzzle #${puzzNum++}...`);
         //printShapeCounts(startingPuzzle);
 
-        const clueData = buildClueOptions(startingPuzzle, 1501, 6001);
+        const clueData = buildClueOptions(config, startingPuzzle, 1501, 6001);
 
         if (clueData.stats.tooExpensive) {
             failReasons.tooExpensive++;
             continue;
         }
 
-        const solutionResult = countSolutionsFromClueOptions(clueData.clueOptions, 2, 50000);
+        const solutionResult = countSolutionsFromClueOptions(config, clueData.clueOptions, 2, 50000);
 
         if (!solutionResult.complete) {
             failReasons.tooHardToCount++;
@@ -1253,31 +1300,41 @@ function generateSolvedPuzzle(maxAttempts = 10000) {
     return null;
 }
 
-function printShapeCounts(puzzle) {
-    const board = puzzle.split("");
-    const clues = getClues(board);
+//-------------------------------------------------------------------------------------------------------------
 
-    const counts = clues.map(clue => ({
-        clue: clue.cell,
-        index: clue.index,
-        shapes: generateIslandShapesForClue(board, clue.index, clue.value).length,
-    }));
+// solpuz = generateSolvedPuzzle(7, 10000000);
+// puzzle = solutionToStarting(solpuz);
+// console.log(puzzle);
+// console.log(solpuz);
 
-    counts.sort((a, b) => b.shapes - a.shapes);
-    console.log(counts);
-}
+// solpuz = generateSolvedPuzzle(9, 10000000);
+// puzzle = solutionToStarting(solpuz);
+// console.log(puzzle);
+// console.log(solpuz);
+
+// solpuz = generateSolvedPuzzle(11, 10000000);
+// puzzle = solutionToStarting(solpuz);
+// console.log(puzzle);
+// console.log(solpuz);
 
 //-------------------------------------------------------------------------------------------------------------
 
-solpuz = generateSolvedPuzzle(10000000);
+// solpuz = generateSolvedPuzzle(9, 10000000);
+// puzzle = solutionToStarting(solpuz);
+// console.log(puzzle);
+// console.log(solpuz);
+
+//-------------------------------------------------------------------------------------------------------------
+
 // const startTime = new Date().getTime();
 // for (let i = 0; i < 100; i++) {
-//     solpuz = generateSolvedPuzzle(10000000);
+//     solpuz = generateSolvedPuzzle(9, 10000000);
 // }
 // const endTime = new Date().getTime();
 // const avgTimeTaken = (endTime - startTime) / 100;
 // console.log("Generation takes " + avgTimeTaken + " milliseconds on average");
-puzzle = solutionToStarting(solpuz);
-console.log(puzzle);
-console.log(solpuz);
+// puzzle = solutionToStarting(solpuz);
+// console.log(puzzle);
+// console.log(solpuz);
+
 //printShapeCounts(puzzle);

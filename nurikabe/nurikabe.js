@@ -99,10 +99,10 @@ function setup() {
   restartButton.position(10, 110);
   restartButton.mousePressed(restart);
 
-  //Create a button to solve the puzzle for testing
-  let solveButton = createButton('Solve');
-  solveButton.position(10, 310);
-  solveButton.mousePressed(solve);
+  // Create a button to solve the puzzle for testing
+  // let solveButton = createButton('Solve');
+  // solveButton.position(10, 310);
+  // solveButton.mousePressed(solve);
 
   let hintButton = createButton('Hint');
   hintButton.position(10, 160);
@@ -116,7 +116,7 @@ function setup() {
   // format the puzzle start and puzzle solution like we need to use it: 
   // window.cantClick = generateStartingColors(selectedPuzzle.puzzle); //cantClick = map(square index, value)
   // window.solution_colors = generateSolutionColors(selectedPuzzle.solpuz); //solution_colors = array (0 for water, 1 for land, size 81)
-  solpuz = generateSolvedPuzzle(10000000);
+  solpuz = generateSolvedPuzzle(9, 10000000);
   window.cantClick = generateStartingColors(solutionToStarting(solpuz)); //cantClick = map(square index, value)
   window.solution_colors = generateSolutionColors(solpuz); //solution_colors = array (0 for water, 1 for land, size 81)
 

@@ -115,8 +115,11 @@ function setup() {
   selectedPuzzle = puzzles[randomKey]; //select the puzzle with this random key
 
   // format the puzzle start and puzzle solution like we need to use it: 
-  window.cantClick = generateStartingColors(selectedPuzzle.puzzle); //cantClick = map(square index, value)
-  window.solution_colors = generateSolutionColors(selectedPuzzle.solpuz); //solution_colors = array (0 for water, 1 for land, size row * col)
+  // window.cantClick = generateStartingColors(selectedPuzzle.puzzle); //cantClick = map(square index, value)
+  // window.solution_colors = generateSolutionColors(selectedPuzzle.solpuz); //solution_colors = array (0 for water, 1 for land, size row * col)
+  solpuz = generateSolvedPuzzle(11, 10000000);
+  window.cantClick = generateStartingColors(solutionToStarting(solpuz)); //cantClick = map(square index, value)
+  window.solution_colors = generateSolutionColors(solpuz); //solution_colors = array (0 for water, 1 for land, size 121)
 
   loadMusic();
 }
