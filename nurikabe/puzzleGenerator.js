@@ -1687,16 +1687,16 @@ function printShapeCounts(puzzle) {
 
 //-------------------------------------------------------------------------------------------------------------
 
-const startTime = new Date().getTime();
-for (let i = 0; i < 100; i++) {
-    solpuz = generateSolvedPuzzle(10000000);
-}
-const endTime = new Date().getTime();
-const avgTimeTaken = (endTime - startTime) / 100;
-console.log("Generation takes " + avgTimeTaken + " milliseconds on average");
-puzzle = solutionToStarting(solpuz);
-console.log(puzzle);
-console.log(solpuz);
+// const startTime = new Date().getTime();
+// for (let i = 0; i < 100; i++) {
+//     solpuz = generateSolvedPuzzle(10000000);
+// }
+// const endTime = new Date().getTime();
+// const avgTimeTaken = (endTime - startTime) / 100;
+// console.log("Generation takes " + avgTimeTaken + " milliseconds on average");
+// puzzle = solutionToStarting(solpuz);
+// console.log(puzzle);
+// console.log(solpuz);
 //printShapeCounts(puzzle);
 
 // console.log(countSolutionsByIslands(puzzle, 2) === 1);
