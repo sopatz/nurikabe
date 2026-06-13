@@ -1,10 +1,23 @@
-let rows = 9; let cols = 9;
-let square_size = 50; //length and height of each square
 let square_states = 2; //number of color states each square can have
 let puzzles = []; //will store the puzzle starting states and solution states
 let rulesPopup;
 let done, winnerPopup = false;
 let hintSquares = []; let cantBeHint = [];
+
+const urlParams = new URLSearchParams(window.location.search);
+const requestedSize = Number(urlParams.get("size"));
+const puzzleSize = [7, 9, 11].includes(requestedSize) ? requestedSize : 9;
+
+let rows = puzzleSize;
+let cols = puzzleSize;
+let square_size = getSquareSize(puzzleSize);
+
+// Changes square size based on the size of the puzzle
+function getSquareSize(size) {
+  if (size === 7) return 60;
+  if (size === 11) return 42;
+  return 50;
+}
 
 //==================================================================================================================
 // Nurikabe rules:
@@ -18,12 +31,6 @@ let hintSquares = []; let cantBeHint = [];
 //==================================================================================================================
 
 function preload() {
-  console.log("Attempting to load puzzles");
-  puzzles = loadJSON('nurikabePuzzles.json', () => {
-    console.log("Puzzles loaded successfully");
-  }, () => {
-    console.log("Failed to load puzzles");
-  });
   backgroundMusic = loadSound('../music/PuzzleBop.wav');
 }
 
@@ -108,15 +115,13 @@ function setup() {
   hintButton.position(10, 160);
   hintButton.mousePressed(hint);
 
-  //Choose random puzzle
-  const keys = Object.keys(puzzles); //get all keys from the stored puzzles
-  const randomKey = keys[Math.floor(Math.random() * keys.length)]; //choose a key at random
-  selectedPuzzle = puzzles[randomKey]; //select the puzzle with this random key
+  // Generate a nurikabe puzzle of specified size with just 1 solution using puzzleGenerator.js
+  solpuz = generateSolvedPuzzle(puzzleSize, 10000000);
+  if (solpuz === null) {
+    console.error(`Failed to generate a ${puzzleSize}x${puzzleSize} puzzle.`);
+    return;
+  }
 
-  // format the puzzle start and puzzle solution like we need to use it: 
-  // window.cantClick = generateStartingColors(selectedPuzzle.puzzle); //cantClick = map(square index, value)
-  // window.solution_colors = generateSolutionColors(selectedPuzzle.solpuz); //solution_colors = array (0 for water, 1 for land, size 81)
-  solpuz = generateSolvedPuzzle(9, 10000000);
   window.cantClick = generateStartingColors(solutionToStarting(solpuz)); //cantClick = map(square index, value)
   window.solution_colors = generateSolutionColors(solpuz); //solution_colors = array (0 for water, 1 for land, size 81)
 
