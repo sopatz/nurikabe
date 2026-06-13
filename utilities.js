@@ -63,3 +63,48 @@ function buyHint(cost) {
     alert("Not enough currency to buy a hint!");
   }
 }
+
+// Music utility functions (getMusicVolume through setupMusicControls)
+function getMusicVolume() {
+  return Number(localStorage.getItem("musicVolume") ?? 50) / 100;
+}
+
+function isMusicMuted() {
+  return localStorage.getItem("musicMuted") === "true";
+}
+
+function applyMusicSettings(sound) {
+  if (!sound) return;
+
+  const volume = isMusicMuted() ? 0 : getMusicVolume();
+  sound.setVolume(volume);
+}
+
+function setupMusicControls(soundGetter) {
+  const muteButton = document.getElementById("muteMusicButton");
+  const volumeSlider = document.getElementById("musicVolumeSlider");
+
+  if (!muteButton || !volumeSlider) return;
+
+  volumeSlider.value = String(Math.round(getMusicVolume() * 100));
+  muteButton.textContent = isMusicMuted() ? "Unmute Music" : "Mute Music";
+
+  volumeSlider.addEventListener("input", () => {
+    localStorage.setItem("musicVolume", volumeSlider.value);
+
+    if (Number(volumeSlider.value) > 0) {
+      localStorage.setItem("musicMuted", "false");
+      muteButton.textContent = "Mute Music";
+    }
+
+    applyMusicSettings(soundGetter());
+  });
+
+  muteButton.addEventListener("click", () => {
+    const nextMuted = !isMusicMuted();
+    localStorage.setItem("musicMuted", String(nextMuted));
+    muteButton.textContent = nextMuted ? "Unmute Music" : "Mute Music";
+
+    applyMusicSettings(soundGetter());
+  });
+}

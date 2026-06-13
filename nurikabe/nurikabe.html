@@ -26,6 +26,13 @@
     <script src="puzzleGenerator.js"></script>
 		<script src="nurikabe.js"></script>
     <button onclick="window.location.href='../puzzleSelect.html'" style="position: absolute; top: 10px; left: 10px; z-index: 1000;">Back to Menu</button>
+    <div id="musicControls" style="position: absolute; top: 310px; left: 10px; z-index: 1000;">
+      <label for="musicVolumeSlider" style="font-family: monospace;">Music Volume</label>
+      <br>
+      <input id="musicVolumeSlider" type="range" min="0" max="100" value="50">
+      <br><br>
+      <button id="muteMusicButton">Mute</button>
+    </div>
   </body>
   <style>
     button { 

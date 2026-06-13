@@ -116,6 +116,9 @@ function setup() {
   hintButton.position(10, 160);
   hintButton.mousePressed(hint);
 
+  // Initialize music controls
+  setupMusicControls(() => backgroundMusic);
+
   // Generate a nurikabe puzzle of specified size with just 1 solution using puzzleGenerator.js
   solpuz = generateSolvedPuzzle(puzzleSize, 10000000);
   if (solpuz === null) {
@@ -146,7 +149,7 @@ function setup() {
 
 function loadMusic() {
 	userStartAudio(); //music starts playing when user interacts with browser
-  backgroundMusic.setVolume(0.5);
+  applyMusicSettings(backgroundMusic);
 	backgroundMusic.play();
   backgroundMusic.loop();
 }

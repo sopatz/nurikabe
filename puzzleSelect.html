@@ -23,6 +23,7 @@
     </div>
 
     <script src="utilities.js"></script>
+    <script src="puzzleSelect.js"></script>
 
     <h3>Puzzles: </h3>
     <button onclick="window.location.href='nurikabe/nurikabe.html?size=7'" style="position: absolute; top: 60px; left: 10px; z-index: 1000;">Nurikabe (Easy)</button>
@@ -32,6 +33,14 @@
     <button onclick="buyHint(10)" style="position: absolute; top: 300px; left: 10px; z-index: 1000;">
         Buy Hint (Cost: 10 Coins)
     </button>
+
+    <div id="musicControls" style="position: absolute; top: 380px; left: 10px; z-index: 1000;">
+      <label for="musicVolumeSlider" style="font-family: monospace;">Music Volume</label>
+      <br>
+      <input id="musicVolumeSlider" type="range" min="0" max="100" value="50">
+      <br><br>
+      <button id="muteMusicButton">Mute</button>
+    </div>
   </body>
   <style>
     button { 
