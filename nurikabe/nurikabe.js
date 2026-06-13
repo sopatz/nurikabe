@@ -3,6 +3,7 @@ let puzzles = []; //will store the puzzle starting states and solution states
 let rulesPopup;
 let done, winnerPopup = false;
 let hintSquares = []; let cantBeHint = [];
+let controlsDisabled = false;
 
 const urlParams = new URLSearchParams(window.location.search);
 const requestedSize = Number(urlParams.get("size"));
@@ -219,6 +220,7 @@ function draw() {
   
   if (isSolved && !done && !winnerPopup) {
     winnerPopup = true;
+    setGameControlsDisabled(true);  // Disable all the buttons from being pressed when winner pop-up is on-screen
     winnerText();
     done = true;
   }
@@ -269,8 +271,21 @@ function hidePopup() {
   rulesPopup.style('display', 'none'); // Hide the pop-up
 }
 
+// Disable all the buttons after puzzle completion
+function setGameControlsDisabled(disabled) {
+  controlsDisabled = disabled;
+  if (rulesPopup) {
+    rulesPopup.style('display', 'none');
+  }
+  document.querySelectorAll('button').forEach((button) => {
+    button.disabled = disabled;
+  });
+}
+
 //Reset all the colors when "Restart" button is pressed
 function restart() {
+  if (controlsDisabled) return;
+
   for (let i = 0; i < colorState.length; ++i) {
     if (!hintSquares.includes(i)) colorState[i] = 0; //only reset squares not part of hints
   }
@@ -286,6 +301,8 @@ function solve() {
 
 //gives the player a hint
 async function hint() {
+  if (controlsDisabled) return;  // So hint cannot be pressed after puzzle completion
+
   // Check if the no more hints popup already exists
   if (document.getElementById("noHint")) {
     return; // Exit the function if the popup is already displayed
