@@ -1,6 +1,11 @@
 let square_states = 2; //number of color states each square can have
 let puzzles = []; //will store the puzzle starting states and solution states
-let rulesPopup;
+let cantClick = new Map();
+let solution_colors = [];
+let rulesPopup, loadingPopup, loadingText, worker;
+let currentAttempt = 0;
+let candidateCount = 0;
+let isGenerating = false;
 let done, winnerPopup = false;
 let hintSquares = []; let cantBeHint = [];
 let controlsDisabled = false;
@@ -36,8 +41,7 @@ function preload() {
 }
 
 function setup() {
-  console.log("Setup is being called");
-  //create a canvas in the center of the screen
+  // Create a canvas in the center of the screen
   canvas = createCanvas(cols * square_size, rows * square_size);
   var center_x = (windowWidth - width) / 2;
   var center_y = (windowHeight - height) / 2;
@@ -119,15 +123,8 @@ function setup() {
   // Initialize music controls
   setupMusicControls(() => backgroundMusic);
 
-  // Generate a nurikabe puzzle of specified size with just 1 solution using puzzleGenerator.js
-  solpuz = generateSolvedPuzzle(puzzleSize, 10000000);
-  if (solpuz === null) {
-    console.error(`Failed to generate a ${puzzleSize}x${puzzleSize} puzzle.`);
-    return;
-  }
-
-  window.cantClick = generateStartingColors(solutionToStarting(solpuz)); //cantClick = map(square index, value)
-  window.solution_colors = generateSolutionColors(solpuz); //solution_colors = array (0 for water, 1 for land, size 81)
+  // Generate nurikabe puzzle with on-screen loading message
+  startGeneration();
 
   // Here is how the puzzle start and puzzle solution state is stored after generateStartingColors and generateSolutionColors:
   //   cantClick: new Map([
@@ -143,8 +140,6 @@ function setup() {
   //                     0, 1, 0, 1, 0, 0, 0, 1, 0,
   //                     1, 1, 0, 1, 0, 1, 1, 1, 0,
   //                     0, 0, 0, 0, 0, 0, 0, 0, 0];
-
-  loadMusic();
 }
 
 function loadMusic() {
@@ -154,7 +149,83 @@ function loadMusic() {
   backgroundMusic.loop();
 }
 
+function startGeneration() {
+    isGenerating = true;
+    showLoading();
+
+    worker = new Worker("puzzleWorker.js");
+    worker.onmessage = function(e) {
+        if (e.data.type === "progress") {
+            currentAttempt = e.data.attempt;
+            loadingText.html(
+                `<h2>Generating Puzzle...</h2>
+                Attempt: ${currentAttempt}<br>
+                Candidates Checked: ${candidateCount}`
+            );
+            return;
+        }
+        if (e.data.type === "candidateCount") {
+            candidateCount = e.data.puzzNum;
+            loadingText.html(
+                `<h2>Generating Puzzle...</h2>
+                Attempt: ${currentAttempt}<br>
+                Candidates Checked: ${candidateCount}`
+            );
+            return;
+        }
+        const solpuz = e.data;
+
+        cantClick = generateStartingColors(solutionToStarting(solpuz));
+        solution_colors = generateSolutionColors(solpuz);
+
+        isGenerating = false;
+
+        hideLoading();
+
+        loadMusic();
+
+        worker.terminate();
+    };
+
+    worker.postMessage({
+        size: puzzleSize
+    });
+}
+
+function showLoading() {
+  loadingPopup = createDiv();
+
+  loadingPopup.html(`
+    <div class="spinner"></div>
+  `);
+
+  loadingText = createDiv("Generating Puzzle...");
+  loadingText.parent(loadingPopup);
+
+  loadingPopup.style('position', 'absolute');
+  loadingPopup.style('left', '50%');
+  loadingPopup.style('top', '50%');
+  loadingPopup.style('transform', 'translate(-50%, -50%)');
+
+  loadingPopup.style('padding', '20px');
+  loadingPopup.style('background-color', 'white');
+  loadingPopup.style('border', '2px solid black');
+  loadingPopup.style('border-radius', '10px');
+
+  loadingPopup.style('z-index', '1000');
+}
+
+function hideLoading() {
+  if (loadingPopup) {
+    loadingPopup.remove();
+  }
+}
+
 function draw() {
+  if (!cantClick || !solution_colors) {
+    return;
+  }
+
   var isSolved = true;
   // Variable that will track which square is hovered
   let hoverSquare = -1;
@@ -231,7 +302,8 @@ function draw() {
 
 
 function mouseClicked() {
-  //when the mouse is clicked, change the color state by negating the value
+  if (isGenerating) return;
+  // When the mouse is clicked, change the color state by negating the value
   for (i = 0; i < rows * cols; ++i) {
     if (!hintSquares.includes(i)) {
       //check if mouse position is within the current square
@@ -287,7 +359,7 @@ function setGameControlsDisabled(disabled) {
 
 //Reset all the colors when "Restart" button is pressed
 function restart() {
-  if (controlsDisabled) return;
+  if (controlsDisabled || isGenerating) return;
 
   for (let i = 0; i < colorState.length; ++i) {
     if (!hintSquares.includes(i)) colorState[i] = 0; //only reset squares not part of hints
@@ -304,7 +376,7 @@ function solve() {
 
 //gives the player a hint
 async function hint() {
-  if (controlsDisabled) return;  // So hint cannot be pressed after puzzle completion
+  if (controlsDisabled || isGenerating) return;  // So hint cannot be pressed after puzzle completion
 
   // Check if the no more hints popup already exists
   if (document.getElementById("noHint")) {
@@ -316,7 +388,7 @@ async function hint() {
 
   //Checks if the user has hints to use 
   if (hints > 0) {
-    console.log(`User has ${hints} hint(s).`);
+    console.log(`User has ${hints} hint(s) remaining.`);
     --hints; //decrease the number of hints by 1
       // Save the updated hint value back to localStorage
       localStorage.setItem('hints', hints);
@@ -392,12 +464,15 @@ async function hint() {
 async function winnerText() {
   await new Promise(r => setTimeout(r, 2000)); //wait a sec
 
-  var coins_earned = Math.floor(Math.random() * (1000 - 100) + 100); //generate random number between 100 and 1000
+  var coins_earned = 0;
+  if (puzzleSize == 7) { coins_earned = randomBellCurveInt(25, 75); }
+  if (puzzleSize == 9) { coins_earned = randomBellCurveInt(75, 125); }
+  if (puzzleSize == 11) { coins_earned = randomBellCurveInt(125, 175); }
 
   winner = createDiv(`
     <h2>Congrats!</h2>
     <p>You have solved the puzzle.</p>
-    <p>You've earned ${100} coins!</p>
+    <p>${coins_earned} coins earned.</p>
   `).id(`completionText`);
   // After creating the element, add an id to it
   winner.style('font-size', '16px');
@@ -427,7 +502,7 @@ async function winnerText() {
 
   await new Promise(r => setTimeout(r, 5000)); //wait a sec or two
 
-  addCurrency(100);
+  addCurrency(coins_earned);
 
   window.location.href = "../puzzleSelect.html"; //send user back to puzzle select
 }

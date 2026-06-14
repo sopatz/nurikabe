@@ -726,11 +726,12 @@ function removeIslandCell(config, board, islands, cellIndex) {
 
 function distanceToNearestWater(config, startCellIndex, waterSet) {
     const visited = new Set();
-    const queue = [{ cellIndex: startCellIndex, distance: 0 }];
     visited.add(startCellIndex);
+    const queue = [{ cellIndex: startCellIndex, distance: 0 }];
+    let front = 0;
 
-    while (queue.length > 0) {
-        const { cellIndex, distance } = queue.shift();
+    while (front < queue.length) {
+        const { cellIndex, distance } = queue[front++];
 
         if (waterSet.has(cellIndex)) {
             return distance;
@@ -1233,7 +1234,12 @@ function generateSolvedPuzzle(size = 9, maxAttempts = 10000) {
     
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
         const candidate = buildCandidateSolution(config);
-        if (attempt % 10000 === 0) console.log(`Attempt: ${attempt}`);
+        if (attempt % 100 === 0) {
+            postMessage({
+                type: "progress",
+                attempt
+            });
+        }
 
         if (candidate === null) {
             failReasons.nullBoard++;
@@ -1270,7 +1276,16 @@ function generateSolvedPuzzle(size = 9, maxAttempts = 10000) {
 
         const solutionString = toString(board);
         const startingPuzzle = solutionToStarting(solutionString);
-        console.log(`Analyzing solution uniqueness for valid puzzle #${puzzNum++}...`);
+
+        postMessage({
+            type: "candidateCount",
+            puzzNum
+        });
+
+        // console.log(
+        //     `Analyzing solution uniqueness for valid puzzle #${puzzNum}...`
+        // );
+        puzzNum++;
         //printShapeCounts(startingPuzzle);
 
         const clueData = buildClueOptions(config, startingPuzzle, 1501, 6001);
