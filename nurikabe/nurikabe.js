@@ -260,13 +260,13 @@ function draw() {
       rect(xpos[i], ypos[i], sideLength, sideLength); // Create square
     }
     else {
-      //make water squares green when puzzle completes
+      // Make water squares green when puzzle completes
       if (solution_colors[i] == 0) fill('green');
       else fill('white');
       rect(xpos[i], ypos[i], sideLength, sideLength);
     }
 
-    //Draw number on starting squares
+    // Draw number on starting squares
     strokeWeight(0); // Set no stroke weight so text doesn't get borders
       // Draw numbers on starting squares
       if (cantClick.has(i)) {
@@ -279,15 +279,17 @@ function draw() {
   }
 
   if (!done) {
-    //Draw green outline for hint squares last so they appear on top
     hintSquares.forEach((index) => {
-      noFill();                // No fill for outline
-      stroke('green');         // Green border for hint squares
-      strokeWeight(3);         // Thicker stroke for visibility
-      rect(xpos[index], ypos[index], sideLength, sideLength); // Draw the green outline
+      noStroke();
+      // Green with alpha (transparency)
+      fill(64, 192, 64, 60);
+      rect(
+        xpos[index],
+        ypos[index],
+        sideLength,
+        sideLength
+      );
     });
-
-    // Reset stroke settings after drawing outlines
     strokeWeight(1);
     stroke('black');
   }
