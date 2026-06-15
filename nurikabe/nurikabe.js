@@ -2,12 +2,16 @@ let square_states = 2; //number of color states each square can have
 let puzzles = []; //will store the puzzle starting states and solution states
 let cantClick = new Map();
 let solution_colors = [];
-let rulesPopup, loadingPopup, loadingText, worker;
+let rulesPopup, loadingPopup, loadingText, worker, hintInstruction;
 let currentAttempt = 0;
 let candidateCount = 0;
 let isGenerating = false;
 let done, winnerPopup = false;
 let hintSquares = []; let cantBeHint = [];
+let selectingHint = false;
+let previewHintTopLeft = -1;
+let previewHintValid = false;
+let consumeNextClick = false;
 let controlsDisabled = false;
 
 const urlParams = new URLSearchParams(window.location.search);
@@ -120,6 +124,12 @@ function setup() {
   hintButton.position(10, 160);
   hintButton.mousePressed(hint);
 
+  // Listen for canvas right-click
+  canvas.elt.addEventListener("contextmenu", (e) => {
+    e.preventDefault(); // stops browser menu
+    cancelHintMode();
+  });
+
   // Initialize music controls
   setupMusicControls(() => backgroundMusic);
 
@@ -229,6 +239,14 @@ function draw() {
   var isSolved = true;
   // Variable that will track which square is hovered
   let hoverSquare = -1;
+
+  if (selectingHint) {
+    const hovered = getHoveredSquare();
+    previewHintTopLeft = getHintRegionTopLeft(hovered);
+    previewHintValid =
+      previewHintTopLeft !== -1 &&
+      isValidHintTopLeft(previewHintTopLeft);
+  }
   
   // Loop through all square position coordinates and color states
   for (i = 0; i < rows * cols; ++i) {
@@ -290,6 +308,29 @@ function draw() {
         sideLength
       );
     });
+    if (selectingHint && previewHintTopLeft !== -1) {
+      const preview = [
+        previewHintTopLeft,
+        previewHintTopLeft + 1,
+        previewHintTopLeft + cols,
+        previewHintTopLeft + cols + 1
+      ];
+      preview.forEach((index) => {
+        noStroke();
+        if (previewHintValid) {
+          fill(0, 255, 0, 80);  // green preview box
+        }
+        else {
+          fill(255, 0, 0, 80);  // red preview box for invalid location
+        }
+        rect(
+          xpos[index],
+          ypos[index],
+          sideLength,
+          sideLength
+        );
+      });
+    }
     strokeWeight(1);
     stroke('black');
   }
@@ -305,10 +346,24 @@ function draw() {
 
 function mouseClicked() {
   if (isGenerating) return;
+  if (consumeNextClick) {
+    consumeNextClick = false;
+    return;
+  }
+  // Hint placement mode
+  if (selectingHint) {
+    if (previewHintValid) {
+      placeHint(previewHintTopLeft);
+    }
+    else {
+      cancelHintMode();  // Cancel hint mode when user clicks outside of canvas
+    }
+    return;
+  }
   // When the mouse is clicked, change the color state by negating the value
   for (i = 0; i < rows * cols; ++i) {
     if (!hintSquares.includes(i)) {
-      //check if mouse position is within the current square
+      // Check if mouse position is within the current square
       if (dist(mouseX, 0, xpos[i], 0) < sideLength / 2 && dist(0, mouseY, 0, ypos[i]) < sideLength / 2) {
         ++colorState[i];
         colorState[i] = colorState[i] % square_states;
@@ -378,89 +433,173 @@ function solve() {
 
 //gives the player a hint
 async function hint() {
-  if (controlsDisabled || isGenerating) return;  // So hint cannot be pressed after puzzle completion
-
-  // Check if the no more hints popup already exists
-  if (document.getElementById("noHint")) {
-    return; // Exit the function if the popup is already displayed
-  }
-
-  // Retrieve the number of hints from localStorage
+  if (controlsDisabled || isGenerating || selectingHint) return;
+  // check if user has hints
   let hints = parseInt(localStorage.getItem('hints')) || 0;
-
-  //Checks if the user has hints to use 
-  if (hints > 0) {
-    console.log(`User has ${hints} hint(s) remaining.`);
-    --hints; //decrease the number of hints by 1
-      // Save the updated hint value back to localStorage
-      localStorage.setItem('hints', hints);
-      // Update displayed hint count
-      const hintCountDisplay = document.getElementById('hintCount');
-      if (hintCountDisplay) {
-          hintCountDisplay.textContent = hints;
-      }
+  if (hints <= 0) {
+    alert("You have no hints to use!");
+    return;
   }
-  else {
-    console.log("User has no hints!");
-      alert('You have no hints to use!');
-      return;
-  }
+  selectingHint = true;
+  // Lock click for 1 frame after clicking hint button so hint mode doesn't close immediately
+  consumeNextClick = true;
 
-  let availableHintIndices = [];
-  for (let i = 0; i < rows * cols - rows; ++i) {
-    if (i % rows !== rows - 1) availableHintIndices.push(i);
-  }
-  let topLeft; // Declare topLeft
-  do {
-    topLeft = Math.floor(Math.random() * (rows * cols - rows)); // Generate a random index between 0 and 71 (all rows but the bottom one)
-    
-    // Filter out any positions that are in cantBeHint
-    availableHintIndices = availableHintIndices.filter(pos => !cantBeHint.includes(pos));
+  hintInstruction = createDiv(
+    "Select a 2x2 area to place your hint<br><small>(ESC or Right-Click to cancel)</small>"
+  );
 
-    //if there are no more available locations for hint
-    if (availableHintIndices.length === 0) {
-      console.log("No more available places for a hint.");
-      let noMoreHint = createDiv(`<h2>No more available places for a hint.</h2>`).id(`noHint`);
-      noMoreHint.style('font-size', '16px');
-      noMoreHint.style('padding', '10px');
-      noMoreHint.style('background-color', '#fff');
-      noMoreHint.style('border', '1px solid #000');
-      noMoreHint.style('position', 'absolute');
-      noMoreHint.style('left', '50%');
-      noMoreHint.style('top', '50%');
-      noMoreHint.style('transform', 'translate(-50%, -50%)');
-      noMoreHint.style('z-index', '1000');
-      noMoreHint.style('opacity', '1');
+  hintInstruction.style('position', 'absolute');
+  hintInstruction.style('left', '50%');
+  hintInstruction.style('top', '7%');
+  hintInstruction.style('transform', 'translateX(-50%)');
 
-      await new Promise(r => setTimeout(r, 700)); //wait a lil
-      // Gradually decrease opacity
-      let opacity = 100;
-      let fadeInterval = setInterval(() => {
-        opacity -= 5; // Decrease opacity value, adjust as needed for speed
-        noMoreHint.style('opacity', opacity / 100);
+  hintInstruction.style('padding', '10px 15px');
+  hintInstruction.style('background-color', 'white');
+  hintInstruction.style('border', '1px solid black');
+  hintInstruction.style('border-radius', '10px');
 
-        // Stop the interval once fully invisible
-        if (opacity <= 0) {
-          clearInterval(fadeInterval);
-          noMoreHint.remove(); // Remove the popup from the DOM, so it can appear again if the hint button is clicked again
-        }
-      }, 50); // Adjust the interval time to control the speed of the fade-out
+  hintInstruction.style('font-size', '18px');
+  hintInstruction.style('text-align', 'center');
 
-      return; // Terminate the function if there are no available positions left
+  hintInstruction.style('z-index', '1000');
+}
+
+
+function getHoveredSquare() {
+  for (let i = 0; i < rows * cols; i++) {
+    if (
+      dist(mouseX, 0, xpos[i], 0) < sideLength / 2 &&
+      dist(0, mouseY, 0, ypos[i]) < sideLength / 2
+    ) {
+      return i;
     }
-  } while (topLeft % rows === rows - 1 || cantBeHint.includes(topLeft)); // Keep generating until it's not in the right column and not in a place that would overlap another hint
+  }
+  return -1;
+}
 
-  hintSquares.push(topLeft, topLeft + 1, topLeft + rows, topLeft + rows + 1); //generate the three other squares of the 2x2 hint square
-  cantBeHint.push(topLeft, topLeft + 1, topLeft + rows, topLeft + rows + 1, topLeft - rows + 1, topLeft - rows, topLeft - rows - 1, topLeft - 1, topLeft + rows - 1); //any topLeft whose hint square would intersect with another hintSquares cannot be hint
+function isValidHintTopLeft(index) {
+  if (index === -1) return false;
 
-  // For each square in hintSquares, set the colorState to the correct solution and make it unclickable
-  hintSquares.forEach((index) => {
-    colorState[index] = solution_colors[index]; // Set the correct color from the solution
+  // can't be in last column
+  if (index % cols === cols - 1) {
+    return false;
+  }
+
+  // can't be in last row
+  if (index >= rows * cols - cols) {
+    return false;
+  }
+
+  // can't overlap another hint
+  if (cantBeHint.includes(index)) {
+    return false;
+  }
+
+  return true;
+}
+
+function placeHint(topLeft) {
+
+  const hintIndices = [
+    topLeft,
+    topLeft + 1,
+    topLeft + cols,
+    topLeft + cols + 1
+  ];
+
+  hintSquares.push(...hintIndices);
+
+  cantBeHint.push(
+    topLeft,
+    topLeft + 1,
+    topLeft + cols,
+    topLeft + cols + 1,
+    topLeft - cols + 1,
+    topLeft - cols,
+    topLeft - cols - 1,
+    topLeft - 1,
+    topLeft + cols - 1
+  );
+
+  hintIndices.forEach((index) => {
+    colorState[index] = solution_colors[index];
   });
 
-  // console.log(topLeft);
-  // console.log(hintSquares); // Log the value for debugging
-  // console.log(cantBeHint);
+  selectingHint = false;
+  previewHintTopLeft = -1;
+
+  let hints = parseInt(localStorage.getItem('hints')) || 0;
+  hints--;
+  localStorage.setItem('hints', hints);
+  const hintCountDisplay = document.getElementById('hintCount');
+  if (hintCountDisplay) {
+      hintCountDisplay.textContent = hints;
+  }
+
+  if (hintInstruction) {
+    hintInstruction.remove();
+    hintInstruction = null;
+  }
+}
+
+function getHintRegionTopLeft(index) {
+  if (index === -1) return -1;
+
+  const row = Math.floor(index / cols);
+  const col = index % cols;
+
+  const candidates = [
+    [row, col],         // hovered square is top-left
+    [row, col - 1],     // hovered square is top-right
+    [row - 1, col],     // hovered square is bottom-left
+    [row - 1, col - 1]  // hovered square is bottom-right
+  ];
+
+  let best = -1;
+  let bestDist = Infinity;
+
+  for (const [r, c] of candidates) {
+
+    // inside board
+    if (r < 0 || c < 0) continue;
+
+    // Need this so the 2x2 doesn't extend off the board
+    if (r >= rows - 1 || c >= cols - 1) continue;
+
+    const topLeft = r * cols + c;
+
+    const centerX = (c + 0.5) * sideLength;
+    const centerY = (r + 0.5) * sideLength;
+
+    const d = dist(mouseX, mouseY, centerX, centerY);
+
+    if (d < bestDist) {
+      bestDist = d;
+      best = topLeft;
+    }
+  }
+
+  return best;
+}
+
+function cancelHintMode() {
+  if (!selectingHint) return;
+
+  selectingHint = false;
+  previewHintTopLeft = -1;
+  previewHintValid = false;
+
+  if (hintInstruction) {
+    hintInstruction.remove();
+    hintInstruction = null;
+  }
+}
+
+function keyPressed() {
+  if (keyCode === ESCAPE && selectingHint) {
+    cancelHintMode();
+    return false;
+  }
 }
 
 async function winnerText() {
